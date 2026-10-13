@@ -1178,3 +1178,69 @@ def actualizar_curso(curso_id: int, curso: CursoCreate, db: Session = Depends(ge
     db.commit()
     db.refresh(db_curso)
     return db_curso
+
+# 1. LISTAR TODAS LAS PREGUNTAS (O FILTRADAS POR PUESTO)
+@app.get("/api/admin/preguntas")
+def obtener_preguntas_rh(puesto: str = None, db: Session = Depends(get_db)):
+    try:
+        query = db.query(models.Pregunta)
+        if puesto:
+            query = query.filter(models.Pregunta.puesto == puesto)
+        preguntas = query.all()
+        return preguntas
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error al obtener las preguntas: {str(e)}"
+        )
+
+# 2. EDITAR / ACTUALIZAR PREGUNTA
+@app.put("/api/admin/preguntas/actualizar/{pregunta_id}")
+def actualizar_pregunta_rh(pregunta_id: int, data: PreguntaCreateRequest, db: Session = Depends(get_db)):
+    try:
+        pregunta = db.query(models.Pregunta).filter(models.Pregunta.id == pregunta_id).first()
+        if not pregunta:
+            raise HTTPException(status_code=404, detail="Pregunta no encontrada")
+        
+        pregunta.puesto = data.puesto
+        pregunta.texto = data.texto
+        pregunta.opciones = data.opciones
+        pregunta.opcion_correcta = data.opcion_correcta
+        pregunta.categoria = data.categoria
+
+        db.commit()
+        db.refresh(pregunta)
+
+        return {
+            "status": "ok",
+            "mensaje": "Pregunta actualizada correctamente",
+            "id": pregunta.id
+        }
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error al actualizar la pregunta: {str(e)}"
+        )
+
+# 3. ELIMINAR PREGUNTA
+@app.delete("/api/admin/preguntas/eliminar/{pregunta_id}")
+def eliminar_pregunta_rh(pregunta_id: int, db: Session = Depends(get_db)):
+    try:
+        pregunta = db.query(models.Pregunta).filter(models.Pregunta.id == pregunta_id).first()
+        if not pregunta:
+            raise HTTPException(status_code=404, detail="Pregunta no encontrada")
+
+        db.delete(pregunta)
+        db.commit()
+
+        return {
+            "status": "ok",
+            "mensaje": "Pregunta eliminada correctamente"
+        }
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error al eliminar la pregunta: {str(e)}"
+        )
