@@ -12,6 +12,7 @@ export const Dashboard = ({ userProfile, score, setScore, onLogout }) => {
   const [datosExamen, setDatosExamen] = useState(null);
   const [intentosRestantes, setIntentosRestantes] = useState(3);
   const [resultadoExamen, setResultadoExamen] = useState(null);
+  const [perfilDetalle, setPerfilDetalle] = useState(null);
 
   const solicitudEjecutada = useRef(false);
 
@@ -33,6 +34,16 @@ export const Dashboard = ({ userProfile, score, setScore, onLogout }) => {
     setErrorIA(null);
 
     const usuarioId = userProfile.id;
+    // Cargar puesto y departamento con sus nombres reales desde la BD
+    try {
+      const resPerfil = await fetch(`http://localhost:8000/api/usuarios/perfil/${usuarioId}`);
+      if (resPerfil.ok) {
+        const dataPerfil = await resPerfil.json();
+        setPerfilDetalle(dataPerfil);
+      }
+    } catch (e) {
+      console.warn("No se pudo cargar el detalle del perfil:", e);
+    }
 
     try {
       // 1. Obtener la ruta de cursos del usuario
@@ -283,17 +294,18 @@ export const Dashboard = ({ userProfile, score, setScore, onLogout }) => {
     }
   };
 console.log("Perfil recibido en Dashboard:", userProfile);
+
   return (
     <div className="max-w-6xl mx-auto p-6 space-y-6">
       {/* Información del Perfil */}
       <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">
-            ¡Hola, {userProfile?.name || userProfile?.nombre || 'Empleado'}!
+            ¡Hola, {perfilDetalle?.nombre || userProfile?.name || userProfile?.nombre || 'Empleado'}!
           </h1>
           <p className="text-slate-500 text-sm mt-1">
-            Puesto: <strong className="text-slate-700"> {userProfile?.position || userProfile?.puesto_id || 'General'} </strong> | 
-            Departamento: <strong className="text-slate-700"> {userProfile?.department || userProfile?.departamento_id || 'General'} </strong>
+            Puesto: <strong className="text-slate-700">{perfilDetalle?.puesto_nombre || userProfile?.position || 'General'}</strong> | 
+            Departamento: <strong className="text-slate-700">{perfilDetalle?.departamento_nombre || userProfile?.department || 'General'}</strong>
           </p>
         </div>
 

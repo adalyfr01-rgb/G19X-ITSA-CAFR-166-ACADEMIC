@@ -32,6 +32,53 @@ export const SeguimientoXAPI = () => {
     }
   };
 
+  // Helper para parsear la propiedad "detalles" cuando viene como string o como objeto
+  const obtenerObjetoDetalles = (rawDetalles) => {
+    if (!rawDetalles) return {};
+    if (typeof rawDetalles === 'object') return rawDetalles;
+    try {
+      return JSON.parse(rawDetalles);
+    } catch (e) {
+      return {};
+    }
+  };
+
+  // Función para exportar la tabla visible a CSV con soporte UTF-8 y columna de Puesto
+  const exportarCSV = () => {
+    if (logs.length === 0) return;
+
+    const headers = ["Colaborador", "Puesto", "Fecha / Hora", "Verbo", "Objeto / Actividad", "Score", "Aciertos", "Total Preguntas"];
+    const rows = logs.map((log) => {
+      const detallesObj = obtenerObjetoDetalles(log.detalles);
+      const fecha = log.marca_tiempo ? new Date(log.marca_tiempo).toLocaleString() : '';
+      const usuario = log.usuario_nombre || `Usuario #${log.usuario_id || log.actor_id || '-'}`;
+      const puesto = log.usuario_puesto || log.puesto || 'Sin Asignar';
+
+      return [
+        `"${usuario}"`,
+        `"${puesto}"`,
+        `"${fecha}"`,
+        `"${log.verbo || ''}"`,
+        `"${log.objeto || ''}"`,
+        `"${detallesObj.score !== undefined ? detallesObj.score : ''}"`,
+        `"${detallesObj.aciertos !== undefined ? detallesObj.aciertos : ''}"`,
+        `"${detallesObj.total_preguntas !== undefined ? detallesObj.total_preguntas : ''}"`
+      ];
+    });
+
+    const csvContent = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+    
+    // Se incluye '\uFEFF' al inicio para forzar la codificación UTF-8 en Excel
+    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `reporte_xapi_${new Date().toISOString().slice(0, 10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const getVerboBadge = (verbo) => {
     const v = String(verbo || '').toLowerCase();
     if (v.includes('completado') || v.includes('completed')) 
@@ -49,9 +96,19 @@ export const SeguimientoXAPI = () => {
   return (
     <div className="p-6 bg-slate-50 min-h-screen text-slate-800">
       <div className="max-w-6xl mx-auto space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">Métricas & Eventos xAPI</h1>
-          <p className="text-slate-500 text-sm">Registro detallado del aprendizaje y rendimiento de los colaboradores</p>
+        <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3">
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900">Métricas & Eventos xAPI</h1>
+            <p className="text-slate-500 text-sm">Registro detallado del aprendizaje y rendimiento de los colaboradores</p>
+          </div>
+
+          {/* Botón de Exportar a CSV */}
+          <button
+            onClick={exportarCSV}
+            className="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-semibold shadow-sm transition-all"
+          >
+            📊 Exportar Reporte (CSV)
+          </button>
         </div>
 
         {/* Filtro por usuario */}
@@ -88,49 +145,77 @@ export const SeguimientoXAPI = () => {
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-100 text-xs font-semibold text-slate-500 uppercase tracking-wider">
                   <th className="p-4 pl-6">Colaborador</th>
+                  <th className="p-4">Puesto</th>
                   <th className="p-4">Fecha / Hora</th>
                   <th className="p-4">Acción</th>
                   <th className="p-4">Curso / Actividad</th>
-                  <th className="p-4 pr-6 text-center">Detalles xAPI</th>
+                  <th className="p-4 text-center">Puntuación / Score</th>
+                  <th className="p-4 pr-6 text-right">Detalles xAPI</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-sm">
                 {logs.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="text-center p-8 text-slate-400">
+                    <td colSpan={7} className="text-center p-8 text-slate-400">
                       No hay eventos xAPI registrados para este filtro.
                     </td>
                   </tr>
                 ) : (
-                  logs.map((log, idx) => (
-                    <tr key={log.id || idx} className="hover:bg-slate-50/70 transition-colors">
-                      {/* Nombre legible */}
-                      <td className="p-4 pl-6 font-semibold text-slate-900">
-                        {log.usuario_nombre || `Usuario #${log.usuario_id || log.actor_id || '-'}`}
-                      </td>
-                      
-                      {/* Fecha formateada */}
-                      <td className="p-4 text-slate-500 text-xs font-mono">
-                        {log.marca_tiempo ? new Date(log.marca_tiempo).toLocaleString() : '-'}
-                      </td>
-                      
-                      {/* Badge con color */}
-                      <td className="p-4">{getVerboBadge(log.verbo)}</td>
-                      
-                      {/* Objeto o curso */}
-                      <td className="p-4 font-medium text-slate-800">{log.objeto || 'General'}</td>
-                      
-                      {/* Botón para abrir modal con JSON */}
-                      <td className="p-4 pr-6 text-center">
-                        <button
-                          onClick={() => setJsonSeleccionado(log.detalles)}
-                          className="inline-flex items-center gap-1 px-3 py-1 text-xs font-semibold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors border border-indigo-200/60"
-                        >
-                          🔍 Ver JSON
-                        </button>
-                      </td>
-                    </tr>
-                  ))
+                  logs.map((log, idx) => {
+                    const detallesObj = obtenerObjetoDetalles(log.detalles);
+                    const tieneScore = detallesObj.score !== undefined;
+
+                    return (
+                      <tr key={log.id || idx} className="hover:bg-slate-50/70 transition-colors">
+                        {/* Nombre legible */}
+                        <td className="p-4 pl-6 font-semibold text-slate-900">
+                          {log.usuario_nombre || `Usuario #${log.usuario_id || log.actor_id || '-'}`}
+                        </td>
+
+                        {/* Puesto del colaborador */}
+                        <td className="p-4 text-slate-600 text-xs font-medium">
+                          {log.usuario_puesto || log.puesto || 'Sin Asignar'}
+                        </td>
+                        
+                        {/* Fecha formateada */}
+                        <td className="p-4 text-slate-500 text-xs font-mono">
+                          {log.marca_tiempo ? new Date(log.marca_tiempo).toLocaleString() : '-'}
+                        </td>
+                        
+                        {/* Badge con color */}
+                        <td className="p-4">{getVerboBadge(log.verbo)}</td>
+                        
+                        {/* Objeto o curso */}
+                        <td className="p-4 font-medium text-slate-800">{log.objeto || 'General'}</td>
+                        
+                        {/* Columna de Puntaje */}
+                        <td className="p-4 text-center font-semibold">
+                          {tieneScore ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-bold bg-slate-100 text-slate-800 border border-slate-200">
+                              {detallesObj.score} pts
+                              {detallesObj.total_preguntas && (
+                                <span className="text-[10px] text-slate-500 font-normal">
+                                  ({detallesObj.aciertos}/{detallesObj.total_preguntas})
+                                </span>
+                              )}
+                            </span>
+                          ) : (
+                            <span className="text-slate-300 font-normal">-</span>
+                          )}
+                        </td>
+
+                        {/* Botón para abrir modal con JSON */}
+                        <td className="p-4 pr-6 text-right">
+                          <button
+                            onClick={() => setJsonSeleccionado(detallesObj)}
+                            className="inline-flex items-center gap-1 px-3 py-1 text-xs font-semibold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors border border-indigo-200/60"
+                          >
+                            🔍 Ver JSON
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>

@@ -241,7 +241,51 @@ def obtener_perfiles(db: Session = Depends(get_db)):
         "puestos": puestos_dict
     }
 
+@app.get("/api/usuarios/perfil/{usuario_id}")
+def obtener_perfil_usuario(usuario_id: int, db: Session = Depends(get_db)):
+    try:
+        usuario = db.query(models.Usuario).filter(models.Usuario.id == usuario_id).first()
+        if not usuario:
+            raise HTTPException(status_code=404, detail="Usuario no encontrado")
 
+        # 1. Mapas para traducir IDs de puestos y departamentos
+        puestos_db = db.query(models.Puesto).all()
+        puestos_map = {str(p.id): p for p in puestos_db}
+
+        deptos_db = db.query(models.Departamento).all()
+        deptos_map = {str(d.id): d.nombre for d in deptos_db}
+
+        # 2. Obtener puesto
+        val_puesto = getattr(usuario, 'puesto', None) or getattr(usuario, 'puesto_id', None)
+        val_puesto_str = str(val_puesto) if val_puesto is not None else ""
+        
+        puesto_obj = puestos_map.get(val_puesto_str)
+        nombre_puesto = puesto_obj.nombre if puesto_obj else (val_puesto_str or "Sin Asignar")
+
+        # 3. Obtener departamento
+        val_depto = getattr(usuario, 'departamento', None) or getattr(usuario, 'departamento_id', None)
+        if not val_depto and puesto_obj and hasattr(puesto_obj, 'departamento_id'):
+            val_depto = puesto_obj.departamento_id
+            
+        val_depto_str = str(val_depto) if val_depto is not None else ""
+        nombre_depto = deptos_map.get(val_depto_str, val_depto_str or "General")
+
+        return {
+            "id": usuario.id,
+            "nombre": getattr(usuario, 'nombre', getattr(usuario, 'nombre_completo', f"Usuario #{usuario.id}")),
+            "email": getattr(usuario, 'email', getattr(usuario, 'correo', '')),
+            "rol": getattr(usuario, 'rol', 'empleado'),
+            "puesto_id": val_puesto,
+            "puesto_nombre": nombre_puesto,
+            "departamento_id": val_depto,
+            "departamento_nombre": nombre_depto
+        }
+
+    except Exception as e:
+        print("Error en /api/usuarios/perfil:", e)
+        raise HTTPException(status_code=500, detail=f"Error al obtener el perfil de usuario: {str(e)}")
+    
+    
 @app.post("/api/rutas/generar-ia")
 def generar_ruta_ia(payload: dict, db: Session = Depends(get_db)):
     puesto_id = payload.get("puesto_id")
@@ -785,12 +829,27 @@ def obtener_xapi_statements(usuario_id: Optional[int] = None, db: Session = Depe
         query = query.filter(XAPIStatement.usuario_id == usuario_id)
         
     statements = query.order_by(XAPIStatement.timestamp.desc()).all()
-    usuarios_map = {u.id: u.nombre for u in db.query(models.Usuario).all()}
+
+    # 1. Mapas para traducir IDs a nombres reales desde PostgreSQL
+    usuarios_db = db.query(models.Usuario).all()
+    usuarios_map = {u.id: u for u in usuarios_db}
+    
+    puestos_db = db.query(models.Puesto).all()
+    puestos_map = {str(p.id): p.nombre for p in puestos_db}
+
     cursos_map = {c.id: c.titulo for c in db.query(models.Curso).all()}
     
     resultado = []
     for st in statements:
-        nombre_usuario = usuarios_map.get(st.usuario_id, f"Usuario #{st.usuario_id}") if st.usuario_id else "Anónimo"
+        usuario_obj = usuarios_map.get(st.usuario_id)
+        nombre_usuario = usuario_obj.nombre if usuario_obj else (f"Usuario #{st.usuario_id}" if st.usuario_id else "Anónimo")
+
+        # 2. Obtener el puesto real del usuario
+        puesto_id_val = getattr(usuario_obj, 'puesto', None) or getattr(usuario_obj, 'puesto_id', None) if usuario_obj else None
+        puesto_str = str(puesto_id_val) if puesto_id_val is not None else ""
+        nombre_puesto = puestos_map.get(puesto_str, puesto_str or "Sin Asignar")
+
+        # 3. Limpieza de verbos
         verb_clean = (st.verb or "").lower()
         if "completed" in verb_clean or "completó" in verb_clean:
             accion_es = "Completado"
@@ -799,7 +858,7 @@ def obtener_xapi_statements(usuario_id: Optional[int] = None, db: Session = Depe
         else:
             accion_es = st.verb.capitalize() if st.verb else "Interactuó"
 
-       
+        # 4. Limpieza del nombre de la actividad / curso
         obj_str = str(st.object_id or "")
         nombre_curso = obj_str
         if "curso-" in obj_str:
@@ -816,6 +875,7 @@ def obtener_xapi_statements(usuario_id: Optional[int] = None, db: Session = Depe
             "id": st.id,
             "usuario_id": st.usuario_id,
             "usuario_nombre": nombre_usuario,
+            "usuario_puesto": nombre_puesto,  # <-- Puesto traducido directamente desde la BD
             "verbo": accion_es,
             "objeto": nombre_curso,
             "detalles": st.statement_json,
@@ -1244,3 +1304,4 @@ def eliminar_pregunta_rh(pregunta_id: int, db: Session = Depends(get_db)):
             status_code=500,
             detail=f"Error al eliminar la pregunta: {str(e)}"
         )
+        
