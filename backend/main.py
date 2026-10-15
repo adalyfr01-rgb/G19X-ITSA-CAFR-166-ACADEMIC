@@ -1,21 +1,30 @@
+import json
 import os
 from datetime import date, datetime, timezone
 from typing import List, Optional
-import json
-from pydantic import BaseModel
+
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, HTTPException, status, APIRouter
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from sqlalchemy import func, text
 from sqlalchemy.orm import Session
-from sqlalchemy import text
-from models import Base, Usuario, XAPIStatement 
+
 import models
-from database import engine, get_db
-from services.ai_adapter import generar_ruta_aprendizaje, generar_evaluacion_final
-from fastapi import APIRouter, HTTPException, Depends
-from sqlalchemy import func
-from models import Curso  
-from models import Usuario, Diagnostico, ProgresoCurso, XAPIStatement
+from database import Base, engine, get_db
+from models import (
+    Curso,
+    Departamento,
+    Diagnostico,
+    EvaluacionResultado,
+    Pregunta,
+    ProgresoCurso,
+    Puesto,
+    RutaAprendizaje,
+    Usuario,
+    XAPIStatement,
+)
+from services.ai_adapter import generar_evaluacion_final, generar_ruta_aprendizaje
 
 # Carga de variables de entorno (.env)
 load_dotenv()
@@ -407,13 +416,26 @@ def crear_curso(curso: CursoCreate, db: Session = Depends(get_db)):
     db.refresh(nuevo_curso)
     return {"status": "ok", "mensaje": "Curso creado exitosamente", "curso": nuevo_curso}
 
+
 @app.get("/api/cursos")
-def listar_cursos(puesto_id: str = None, db: Session = Depends(get_db)):
+def obtener_todos_los_cursos(puesto_id: Optional[str] = None, db: Session = Depends(get_db)):
     query = db.query(models.Curso)
     if puesto_id:
         query = query.filter(models.Curso.puesto_id == puesto_id)
     cursos = query.all()
-    return {"status": "ok", "total": len(cursos), "cursos": cursos}
+    
+    return [
+        {
+            "id": c.id,
+            "titulo": c.titulo,
+            "descripcion": c.descripcion,
+            "categoria": getattr(c, 'categoria', 'Capacitación'),
+            "duracion": getattr(c, 'duracion', 'Flexible'),
+            "nivel": getattr(c, 'nivel', 'General'),
+            "url_contenido": c.url_contenido
+        }
+        for c in cursos
+    ]
 
 @app.get("/api/cursos/{curso_id}")
 def obtener_detalle_curso(curso_id: int, db: Session = Depends(get_db)):
@@ -677,22 +699,6 @@ def obtener_diagnosticos_usuario(usuario_id: int, db: Session = Depends(get_db))
     registros = db.query(models.Diagnostico).filter(models.Diagnostico.usuario_id == usuario_id).all()
     return registros
 
-@app.get("/api/cursos")
-def obtener_todos_los_cursos(db: Session = Depends(get_db)):
-    cursos = db.query(models.Curso).all()
-    return [
-        {
-            "id": c.id,
-            "titulo": c.titulo,
-            "descripcion": c.descripcion,
-            "categoria": getattr(c, 'categoria', 'Capacitación'),
-            "duracion": getattr(c, 'duracion', 'Flexible'),
-            "nivel": getattr(c, 'nivel', 'General'),
-            "url_contenido": c.url_contenido
-        }
-        for c in cursos
-    ]
-    
 
 @app.post("/api/evaluaciones/generar")
 def api_generar_evaluacion(payload: dict, db: Session = Depends(get_db)):
