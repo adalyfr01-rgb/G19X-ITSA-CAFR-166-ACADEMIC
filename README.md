@@ -5,8 +5,11 @@
 
 ## Qué hace
 
-Es una plataforma web para el proceso de capacitación del personal de nuevo ingreso. Aunque es una solución genérica diseñada para adaptarse a los planes de estudio y requerimientos de cualquier empresa u organización, para efectos de esta evaluación está configurada y cargada con el contenidos de PluriOne S.A. de C.V.
+Es una plataforma web para el proceso de capacitación del personal de nuevo ingreso. Aunque es una solución genérica diseñada para adaptarse a los planes de estudio y requerimientos de cualquier empresa u organización, para efectos de esta evaluación está configurada y cargada con los contenidos de PluriOne S.A. de C.V.
 
+## Integración con IA
+
+Utiliza la API de Google Gemini para la generación dinámica de rutas de aprendizaje adaptativas y evaluaciones diagnósticas según el perfil y puesto del empleado.
 
 ## Qué necesitas instalado
 
@@ -24,21 +27,19 @@ python seed.py
 ```
 
 ## Configuración
-Copia .env.example a .env en la carpeta backend/ y llena los valores (los reales están en «Accesos de prueba», en Mis documentos).
+Copia el archivo `.env.example` a `.env` dentro de la carpeta `backend/` y reemplaza los valores con tus credenciales locales (`DATABASE_URL` para PostgreSQL y `GEMINI_API_KEY` para la IA).
 
 ## Cómo instalarlo y ejecutarlo
-## Backend (FastAPI):
-
- ```bash
+**Backend (FastAPI):**
+```bash
 cd backend
 python -m venv venv
 venv\Scripts\activate
 pip install -r requirements.txt
-uvicorn app.main:app --reload
+uvicorn main:app --reload
 ```
 
-## Frontend (React + Vite):
-
+**Frontend (React + Vite):**
 ```bash
 cd frontend
 npm install
@@ -48,10 +49,9 @@ npm run dev
 Se abre en http://localhost:5173
 
 ## Usuario de prueba
+
 Administrador (RH): ana.rojas@plurione.com / password123
-
 Empleado (Dev): carlos.mendoza@plurione.com / password123
-
 Empleado (Ventas): mariana.gomez@plurione.com / password123
 
 ## Lo que todavía no funciona
