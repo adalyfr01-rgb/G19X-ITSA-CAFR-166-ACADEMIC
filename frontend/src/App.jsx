@@ -10,7 +10,6 @@ export default function App() {
   const [userProfile, setUserProfile] = useState(null);
   const [examData, setExamData] = useState(null);
   const [finalScore, setFinalScore] = useState(0);
-  const [selectedCourseId, setSelectedCourseId] = useState(null);
 
   // Restaurar sesión automáticamente al dar F5
   useEffect(() => {
@@ -104,18 +103,12 @@ export default function App() {
     setStep(4);
   };
 
-  const handleSelectCourse = (cursoId) => {
-    setSelectedCourseId(cursoId);
-    setStep(6);
-  };
-
   const handleLogout = () => {
     localStorage.removeItem('pluriUser');
     setCurrentUser(null);
     setUserProfile(null);
     setExamData(null);
     setFinalScore(0);
-    setSelectedCourseId(null);
     setStep(1);
   };
 
@@ -177,7 +170,6 @@ export default function App() {
           score={finalScore}
           setScore={setFinalScore}
           onLogout={handleLogout}
-          onSelectCourse={handleSelectCourse}
         />
       )}
 
@@ -191,19 +183,6 @@ export default function App() {
               <h2 className="text-2xl font-bold text-red-600">Acceso Denegado</h2>
             </div>
           )}
-        </div>
-      )}
-
-      {step === 6 && selectedCourseId && (
-        <div className="p-6">
-          <Curso 
-            cursoId={selectedCourseId} 
-            usuarioId={currentUser?.id}
-            onBack={() => {
-              setSelectedCourseId(null);
-              setStep(4);
-            }} 
-          />
         </div>
       )}
     </div>
