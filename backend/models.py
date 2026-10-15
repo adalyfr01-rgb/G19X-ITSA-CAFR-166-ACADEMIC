@@ -132,3 +132,17 @@ class XAPIStatement(Base):
     timestamp = Column(DateTime, default=datetime.utcnow)
 
     usuario = relationship("Usuario")
+    
+class EvaluacionResultado(Base):
+    __tablename__ = "evaluaciones_resultados"
+
+    id = Column(Integer, primary_key=True, index=True)
+    usuario_id = Column(Integer, ForeignKey("usuarios.id"), nullable=False)
+    puntaje = Column(Float, nullable=False)
+    aciertos = Column(Integer, nullable=False)
+    total_preguntas = Column(Integer, nullable=False)
+    aprobado = Column(Boolean, default=False)
+    intentos_restantes = Column(Integer, default=3)
+    fecha_evaluacion = Column(DateTime, default=datetime.utcnow)
+
+    usuario = relationship("Usuario")
