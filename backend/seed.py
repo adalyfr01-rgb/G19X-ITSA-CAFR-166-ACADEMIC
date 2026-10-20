@@ -1,5 +1,6 @@
 from database import SessionLocal, engine
 import models
+from security import hash_password
 
 # Crear las tablas en la base de datos si no existen
 models.Base.metadata.create_all(bind=engine)
@@ -30,7 +31,7 @@ def seed_database():
             admin_rh = models.Usuario(
                 nombre="Ana Rojas Fuentes",
                 email="ana.rojas@plurione.com",
-                password="password123",
+                password=hash_password("password123"),
                 rol="admin",
                 departamento="Recursos Humanos",
                 puesto="Analista de Capacitación"
@@ -38,7 +39,7 @@ def seed_database():
             emp_dev = models.Usuario(
                 nombre="Carlos Mendoza",
                 email="carlos.mendoza@plurione.com",
-                password="password123",
+                password=hash_password("password123"),
                 rol="empleado",
                 departamento="Tecnología e Innovación",
                 puesto="Desarrollador Junior"
@@ -46,7 +47,7 @@ def seed_database():
             emp_ventas = models.Usuario(
                 nombre="Mariana Gómez",
                 email="mariana.gomez@plurione.com",
-                password="password123",
+                password=hash_password("password123"),
                 rol="empleado",
                 departamento="Ventas y Comercial",
                 puesto="Ejecutivo de Ventas"

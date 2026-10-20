@@ -2,7 +2,7 @@ import json
 import os
 from datetime import date, datetime, timezone
 from typing import List, Optional
-
+from security import hash_password, verify_password
 from dotenv import load_dotenv
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -140,11 +140,14 @@ def registrar_usuario(data: UserRegister, db: Session = Depends(get_db)):
     usuario_existente = db.query(models.Usuario).filter(models.Usuario.email == data.email).first()
     if usuario_existente:
         raise HTTPException(status_code=400, detail="El correo ya está registrado.")
+    
+    # Convertir la contraseña en texto plano a un hash seguro con bcrypt
+    hashed_pwd = hash_password(data.password)
 
     nuevo_usuario = models.Usuario(
         nombre=data.nombre,
         email=data.email,
-        password=data.password,
+        password=hashed_pwd,
         rol=data.rol,
         departamento=data.departamento,
         puesto=data.puesto
@@ -168,7 +171,8 @@ def registrar_usuario(data: UserRegister, db: Session = Depends(get_db)):
 def login(data: LoginData, db: Session = Depends(get_db)):
     usuario = db.query(models.Usuario).filter(models.Usuario.email == data.email).first()
 
-    if not usuario or usuario.password != data.password:
+   # Validar si el usuario existe y si el hash de la contraseña coincide
+    if not usuario or not verify_password(data.password, usuario.password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Correo o contraseña incorrectos."
