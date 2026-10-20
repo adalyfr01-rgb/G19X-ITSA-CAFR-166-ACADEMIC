@@ -913,23 +913,6 @@ def registrar_xapi_statement(data: XAPIStatementCreate, db: Session = Depends(ge
         print(f"Error guardando xAPI statement: {e}")
         return {"status": "ok", "mensaje": "Statement procesado"}
    
-@app.post("/api/admin/preguntas")
-def crear_pregunta_diagnostico(data: PreguntaCreate, db: Session = Depends(get_db)):
-    try:
-        nueva_p = models.PreguntaDiagnostico(
-            puesto_id=data.puesto_id,
-            pregunta=data.pregunta,
-            opciones=data.opciones,
-            opcion_correcta=data.opcion_correcta,
-            categoria=data.categoria
-        )
-        db.add(nueva_p)
-        db.commit()
-        db.refresh(nueva_p)
-        return {"status": "ok", "mensaje": "Pregunta guardada con éxito", "id": nueva_p.id}
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=f"Error al guardar la pregunta: {str(e)}")
 
 @app.get("/api/evaluaciones/diagnostico/{puesto_id}")
 def obtener_preguntas_por_puesto(puesto_id: str, db: Session = Depends(get_db)):
