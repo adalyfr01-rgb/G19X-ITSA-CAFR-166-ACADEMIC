@@ -31,6 +31,8 @@ Copia el archivo `.env.example` a `.env` dentro de la carpeta `backend/` y reemp
 ```bash
 python seed.py
 ```
+> ⚠️ **Atención si ya tenías la base de datos creada previamente:**  
+> Si tu base de datos ya contenía usuarios con contraseñas guardadas en texto plano (sin cifrar), es **necesario borrar esos usuarios o eliminar y recrear la base de datos `capacitacion_db`** antes de volver a ejecutar `python seed.py`. Debido a que `seed.py` no sobrescribe usuarios existentes y el sistema ahora requiere autenticación con contraseñas cifradas (hash bcrypt), el inicio de sesión no reconocerá las contraseñas antiguas sin cifrar.
 
 ## Cómo instalarlo y ejecutarlo
 
