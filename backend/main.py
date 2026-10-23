@@ -990,7 +990,10 @@ def registrar_xapi_statement(data: XAPIStatementCreate, db: Session = Depends(ge
     except Exception as e:
         db.rollback()
         print(f"Error guardando xAPI statement: {e}")
-        return {"status": "ok", "mensaje": "Statement procesado"}
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error interno al registrar el evento xAPI: {str(e)}"
+        )
    
 
 @app.get("/api/evaluaciones/diagnostico/{puesto_id:path}", tags=["Evaluaciones"])
