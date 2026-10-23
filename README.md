@@ -17,19 +17,23 @@ Utiliza la API de Google Gemini para la generación dinámica de rutas de aprend
 - Node.js 18+
 - PostgreSQL 16+
 
+## Configuración
+
+Copia el archivo `.env.example` a `.env` dentro de la carpeta `backend/` y reemplaza los valores con tus credenciales locales (`DATABASE_URL` para PostgreSQL, `GEMINI_API_KEY` para la IA y `JWT_SECRET_KEY` para la firma de tokens JWT).
+
+> **Nota importante:** El archivo `.env` debe existir obligatoriamente antes de ejecutar cualquier script o iniciar el servidor, ya que `database.py` requiere la variable `DATABASE_URL` para establecer la conexión a la base de datos.
+
 ## Base de datos
 
-1. Crea una base vacía llamada `capacitacion_db`.
-2. Para cargar la estructura y datos de prueba, ejecuta desde la carpeta `backend/`:
+1. Crea una base de datos vacía llamada `capacitacion_db` en PostgreSQL.
+2. Para cargar la estructura y los datos de prueba iniciales, ejecuta desde la carpeta `backend/`:
 
 ```bash
 python seed.py
 ```
 
-## Configuración
-Copia el archivo `.env.example` a `.env` dentro de la carpeta `backend/` y reemplaza los valores con tus credenciales locales (`DATABASE_URL` para PostgreSQL y `GEMINI_API_KEY` para la IA).
-
 ## Cómo instalarlo y ejecutarlo
+
 **Backend (FastAPI):**
 ```bash
 cd backend
@@ -48,10 +52,11 @@ npm run dev
 
 Se abre en http://localhost:5173
 
-## Usuario de prueba
-
+## Usuarios de prueba
 Administrador (RH): ana.rojas@plurione.com / password123
+
 Empleado (Dev): carlos.mendoza@plurione.com / password123
+
 Empleado (Ventas): mariana.gomez@plurione.com / password123
 
 ## Lo que todavía no funciona
