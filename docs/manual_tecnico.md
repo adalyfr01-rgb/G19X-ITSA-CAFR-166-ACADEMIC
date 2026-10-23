@@ -3,7 +3,7 @@
 
 **Proyecto:** Plataforma de Capacitación Inicial Personalizada (PluriOne Enterprise)  
 **Cliente / Entorno:** PluriOne S.A. de C.V.  
-**Caso de Estudio:** Empresa Develop  
+**Caso de Estudio:** PluriOne S.A. de C.V.  
 **Stack Tecnológico:** React.js, FastAPI (Python), PostgreSQL, Google Gemini API  
 **Autor:** Carmen Adaly Flores Rendon  
 
@@ -22,69 +22,79 @@ El sistema está diseñado para ejecutarse en cualquier entorno estándar de des
 
 ## 2. Estructura y Módulos del Repositorio
 
-El proyecto mantiene una separación clara entre la lógica del servidor (backend) y la interfaz de usuario (frontend):
+El proyecto mantiene una separación clara entre la lógica del servidor (backend), la interfaz de usuario (frontend) y la documentación:
 
 ```text
-PluriOne-Enterprise/
+capacitaciones/
 ├── backend/
-│   ├── app/
-│   │   ├── main.py              # Punto de entrada de la API FastAPI
-│   │   ├── models.py            # Modelos ORM de la Base de Datos (PostgreSQL)
-│   │   ├── database.py          # Conexión y gestión de sesiones a la BD
-│   │   ├── services/
-│   │   │   └── ai_adapter.py    # Módulo adaptador para conexión con Google Gemini API
-│   │   └── routers/             # Rutas y servicios (autenticación, diagnósticos, rutas, xapi)
-│   ├── seed.py                  # Script automatizado para cargar la base de datos de prueba
-│   ├── requirements.txt         # Lista de librerías de Python requeridas
-│   └── .env.example             # Plantilla de variables de entorno
+│   ├── services/
+│   │   └── ai_adapter.py    # Adaptador para integración con Google Gemini API y fallback
+│   ├── database.py          # Configuración y sesión de SQLAlchemy para PostgreSQL
+│   ├── main.py              # Punto de entrada de FastAPI, endpoints y middleware CORS
+│   ├── models.py            # Modelos ORM (Usuario, Curso, Pregunta, Examen, etc.)
+│   ├── security.py          # Hash de contraseñas (bcrypt) y gestión de tokens JWT
+│   ├── seed.py              # Script automatizado para estructurar y popular la BD
+│   ├── requirements.txt     # Librerías de Python requeridas
+│   ├── .env                 # Variables de entorno locales
+│   └── .env.example         # Plantilla de variables de entorno
+├── docs/
+│   └── manual_tecnico.md    # Documentación técnica y de mantenimiento
 ├── frontend/
 │   ├── src/
-│   │   ├── components/          # Componentes visuales reutilizables
-│   │   ├── pages/               # Vistas principales (Dashboards RH, Examen, Reproductor)
-│   │   └── services/            # Conexión HTTP para comunicarse con el Backend
-│   ├── package.json             # Dependencias de React y herramientas de construcción
-│   └── vite.config.js           # Configuración del servidor de desarrollo frontend
-└── README.md                    # Instrucciones generales del proyecto
+│   │   ├── assets/          # Recurso estáticos e imágenes
+│   │   ├── components/      # Componentes UI reutilizables
+│   │   ├── pages/           # Vistas (AdminDashboard, Dashboard, Exam, Login, etc.)
+│   │   ├── App.jsx          # Enrutador principal y estructura de la app React
+│   │   └── main.jsx         # Punto de entrada de Vite / React
+│   ├── package.json         # Dependencias del proyecto Frontend
+│   └── vite.config.js       # Configuración del empaquetador Vite
+└── README.md                # Guía rápida de uso del repositorio
 ```
 
-## 3. Configuración de Variables de Entorno (.env)
+# 3. Configuración de Variables de Entorno (.env)
+Para que el backend se conecte correctamente a PostgreSQL, firme tokens de autenticación y comunique con la API de IA, se debe crear un archivo llamado .env dentro de la carpeta backend/ tomando como base el archivo .env.example:
 
-Para que el backend se conecte correctamente a PostgreSQL y al motor de Inteligencia Artificial, se debe crear un archivo llamado `.env` dentro de la carpeta `backend/` tomando como base el archivo `.env.example`:
-
-```env```
-# Conexión a Base de Datos PostgreSQL
+Fragmento de código
+**Conexión a Base de Datos PostgreSQL**
 DATABASE_URL=postgresql://postgres:tu_password@localhost:5432/capacitacion_db
 
-# Credencial para el Motor de Inteligencia Artificial
+**Credencial para el Motor de Inteligencia Artificial**
 GEMINI_API_KEY=TuClaveDeApiDeGoogleGeminiAqui
 
-4. Guía Paso a Paso de Instalación y Puesta en Marcha
+**Clave Secreta para la firma de tokens JWT**
+JWT_SECRET_KEY=tu_clave_secreta_aqui_cambiame_en_produccion
+
+# 4. Guía Paso a Paso de Instalación y Puesta en Marcha
 Paso 1: Configurar y Desplegar el Backend (Servidor)
 Abrir una terminal y navegar a la carpeta del servidor:
 
 ```bash
 cd backend
 ```
+
 Crear un entorno virtual de Python e instalar las librerías necesarias:
 ```bash
 python -m venv venv
 ```
 
-# Activar en Windows:
+Activar en Windows:
+```bash
 venv\Scripts\activate
+```
 
-# Instalar dependencias del proyecto:
+Instalar dependencias del proyecto:
+```bash
 pip install -r requirements.txt
-Ejecutar el script automatizado para crear la base de datos y popular los datos iniciales de la empresa Develop:
+```
 
+Ejecutar el script automatizado para crear la base de datos y popular los datos iniciales de PluriOne S.A. de C.V.:
 ```bash
 python seed.py
 ```
 
 Iniciar el servidor API de FastAPI:
-
 ```bash
-uvicorn app.main:app --reload
+uvicorn main:app --reload
 ```
 
 API activa en: http://localhost:8000
@@ -99,7 +109,6 @@ cd frontend
 ```
 
 Instalar los paquetes e iniciar el servidor de desarrollo:
-
 ```bash
 npm install
 npm run dev
@@ -107,18 +116,20 @@ npm run dev
 
 Interfaz web disponible en: http://localhost:5173
 
-5. Funcionamiento del Script de Carga Inicial (seed.py)
+# 5. Funcionamiento del Script de Carga Inicial (seed.py)
 El script seed.py permite preparar el entorno de prueba en un solo comando sin necesidad de insertar datos manualmente:
 
-Estructura de Base de Datos: Detecta las tablas en PostgreSQL y las crea si no existen.
+- Estructura de Base de Datos: Detecta las tablas en PostgreSQL y las crea si no existen.
 
-Carga de Organización: Registra los departamentos y puestos del caso de estudio.
+- Carga de Organización: Registra los departamentos y puestos del entorno de PluriOne S.A. de C.V.
 
-Catálogo de Contenidos: Puebla el catálogo de cursos clasificados por sus niveles (Básico, Intermedio, Avanzado).
+- Catálogo de Contenidos: Puebla el catálogo de cursos clasificados por sus niveles (Básico, Intermedio, Avanzado).
 
-Banco de Reactivos: Carga las preguntas y opciones del cuestionario diagnóstico inicial.
+- Banco de Reactivos: Carga las preguntas y opciones del cuestionario diagnóstico inicial.
 
-6. Mantenimiento del Sistema
-Incorporación de Cursos: Nuevos contenidos agregados por el administrador desde el panel web o la base de datos son detectados automáticamente por ai_adapter.py en las recomendaciones siguientes.
+- Seguridad: Genera las contraseñas iniciales con hash seguro (bcrypt).
 
-Rotación de Claves: En caso de cambiar la clave de acceso a la API de Gemini o cambiar la contraseña de PostgreSQL, únicamente se edita el archivo .env del backend sin alterar el código fuente.
+# 6. Mantenimiento del Sistema
+- Incorporación de Cursos: Nuevos contenidos agregados por el administrador desde el panel web o la base de datos son detectados automáticamente por ai_adapter.py en las recomendaciones de la ruta adaptativa.
+
+- Rotación de Claves: En caso de cambiar la clave de acceso a la API de Gemini, la firma JWT o la contraseña de PostgreSQL, únicamente se edita el archivo .env del backend sin alterar el código fuente.
