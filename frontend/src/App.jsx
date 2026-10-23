@@ -29,6 +29,10 @@ export default function App() {
     setCurrentUser(user);
     localStorage.setItem('pluriUser', JSON.stringify(user));
 
+  if (user?.access_token){
+    localStorage.setItem('token', user.access_token);
+  }
+
    if (user?.rol === 'rh' || user?.rol === 'rrhh' || user?.rol === 'admin') {
      setStep(5);
      return;

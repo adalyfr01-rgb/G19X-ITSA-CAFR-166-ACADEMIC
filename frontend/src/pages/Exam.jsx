@@ -9,12 +9,26 @@ export const Exam = ({ examData, userName = "Empleado", userProfile = {}, onComp
 
   const [timeLeft, setTimeLeft] = useState(180);
 
+  // 1. Normalización de preguntas: detecta si viene un arreglo directo [...] o un objeto { preguntas: [...] }
+  const questionsList = Array.isArray(examData) 
+    ? examData 
+    : (examData?.preguntas || []);
+
+  const totalQuestions = questionsList.length;
+  const currentQuestion = questionsList[currentIndex];
+  const progressPercentage = totalQuestions > 0 ? Math.round(((currentIndex + 1) / totalQuestions) * 100) : 0;
+
+  // 2. Temporizador protegido: SOLO se dispara al agotarse el tiempo SI ya existen preguntas cargadas
   useEffect(() => {
     if (submitted) return;
+
     if (timeLeft <= 0) {
-      handleFinalize();
+      if (totalQuestions > 0) {
+        handleFinalize();
+      }
       return;
     }
+
     const timer = setInterval(() => setTimeLeft((prev) => prev - 1), 1000);
     return () => clearInterval(timer);
   }, [timeLeft, submitted]);
@@ -25,11 +39,8 @@ export const Exam = ({ examData, userName = "Empleado", userProfile = {}, onComp
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const totalQuestions = examData?.preguntas?.length || 0;
-  const currentQuestion = examData?.preguntas?.[currentIndex];
-  const progressPercentage = totalQuestions > 0 ? Math.round(((currentIndex + 1) / totalQuestions) * 100) : 0;
-
   const handleSelectOption = (optionIndex) => {
+    if (!currentQuestion) return;
     setAnswers({
       ...answers,
       [currentQuestion.id]: optionIndex,
@@ -44,80 +55,61 @@ export const Exam = ({ examData, userName = "Empleado", userProfile = {}, onComp
     }
   };
 
-  const handleFinalize = async () => {
-    // Evitar que se ejecute más de una vez
-    if (submitted) return;
+   const handleFinalize = async () => {
+    if (submitted || totalQuestions === 0) return;
 
-    let totalScore = 0;
-    examData?.preguntas?.forEach((q) => {
-      const selectedIndex = answers[q.id];
-      if (selectedIndex !== undefined) {
-        const optionWeight = (selectedIndex + 1) / q.opciones.length;
-        totalScore += optionWeight;
-      }
-    });
-
-    const calculatedScore = Math.round((totalScore / (totalQuestions || 1)) * 100);
-    setScore(calculatedScore);
-    setSubmitted(true);
     setIsGeneratingPath(true);
 
-    // Extraer datos del usuario y normalizar puesto 
-    const activeUserId = userProfile?.id || 1;
-    const puestoRaw = userProfile?.puesto_id || userProfile?.position || userProfile?.puesto || 'dev';
-    const activePuestoId = String(puestoRaw).toLowerCase().includes('backend') ? 'dev' : String(puestoRaw);
+    const activeUserId = userProfile?.id || 3;
+    const puestoRaw = userProfile?.puesto_id || userProfile?.position || userProfile?.puesto || 'Gerente de Ventas / Business';
+
+    // 1. Formatear las respuestas según el esquema EvaluarDiagnosticoRequest del backend
+    const respuestasFormateadas = questionsList.map((q, idx) => ({
+      pregunta_id: q.id,
+      opcion_seleccionada: answers[q.id] !== undefined ? Number(answers[q.id]) : Number(answers[idx])
+    }));
 
     try {
-      // 1. Guardar diagnóstico único en la base de datos
-      const resDiag = await fetch('http://localhost:8000/api/diagnostico/guardar', {
+      // 2. Enviar a tu endpoint backend para que PostgreSQL evalúe el score real
+      const resEval = await fetch('http://localhost:8000/api/evaluaciones/diagnostico/evaluar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           usuario_id: activeUserId,
-          puesto_id: activePuestoId,
-          score: calculatedScore,
+          puesto_id: puestoRaw,
+          respuestas: respuestasFormateadas
         }),
       });
 
-      if (resDiag.ok) {
-        const dataDiag = await resDiag.json();
-        console.log('✅ Diagnóstico guardado en BD:', dataDiag);
-      }
+      if (resEval.ok) {
+        const dataEval = await resEval.json();
+        console.log('✅ EVALUACIÓN DEL BACKEND EXITOSA:', dataEval);
+        
+        // Asignar el score real que calculó la Base de Datos (ej. 80%)
+        setScore(dataEval.score);
+        setSubmitted(true);
 
-      // 2. REGISTRAR EVENTO EN xAPI (Learning Record Store)
-      await fetch('http://localhost:8000/api/xapi/statements', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          usuario_id: activeUserId,
-          verb: 'completed',
-          object_id: 'diagnostico-inicial',
-          statement_json: {
-            score: calculatedScore,
-            status: calculatedScore >= 70 ? 'passed' : 'failed',
-            puesto: activePuestoId
-          }
-        })
-      });
+        // 3. Generar la ruta adaptativa con IA con el score correcto
+        const resIA = await fetch('http://localhost:8000/api/rutas/generar-ia', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            puesto_id: puestoRaw,
+            usuario_id: activeUserId,
+            respuestas: answers,
+          }),
+        });
 
-      // 2. Generar la ruta adaptativa mediante la IA de Gemini
-      const resIA = await fetch('http://localhost:8000/api/rutas/generar-ia', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          puesto_id: activePuestoId,
-          usuario_id: activeUserId,
-          respuestas: answers,
-        }),
-      });
-
-      if (resIA.ok) {
-        const dataIA = await resIA.json();
-        console.log('🤖 Ruta de IA generada:', dataIA);
+        if (resIA.ok) {
+          const dataIA = await resIA.json();
+          console.log('🤖 Ruta de IA generada:', dataIA);
+        }
+      } else {
+        console.error('Error al evaluar en backend:', await resEval.text());
       }
 
     } catch (err) {
-      console.error('❌ Error guardando el diagnóstico o generando la ruta de IA:', err);
+      console.error('❌ Error procesando el diagnóstico:', err);
     } finally {
       setIsGeneratingPath(false);
     }
@@ -125,9 +117,23 @@ export const Exam = ({ examData, userName = "Empleado", userProfile = {}, onComp
 
   const initialLetter = userName ? userName.charAt(0).toUpperCase() : 'U';
 
+  // Si no hay preguntas listas en pantalla y aún no finaliza, muestra estado de carga
   if (!currentQuestion && !submitted) {
-    return <div className="p-8 text-center text-slate-600">Cargando evaluación...</div>;
+    return (
+      <div className="min-h-screen w-full bg-slate-200 flex items-center justify-center p-6">
+        <div className="bg-white p-8 rounded-xl shadow-lg text-center max-w-md">
+          <h3 className="text-lg font-bold text-slate-800 mb-2">Cargando evaluación...</h3>
+          <p className="text-xs text-slate-500">
+            Obteniendo las preguntas diagnósticas configuradas por el administrador para tu puesto.
+          </p>
+        </div>
+      </div>
+    );
   }
+
+  // Atributos de pregunta flexibles (soporta .texto o .pregunta)
+  const textoPregunta = currentQuestion?.texto || currentQuestion?.pregunta || "Sin enunciado";
+  const opcionesPregunta = currentQuestion?.opciones || [];
 
   return (
     <div className="min-h-screen w-full bg-slate-200 flex items-center justify-center p-6">
@@ -193,12 +199,12 @@ export const Exam = ({ examData, userName = "Empleado", userProfile = {}, onComp
                 {/* Tarjeta de Pregunta */}
                 <div className="border-2 border-slate-800 rounded-2xl p-6 sm:p-8 bg-white shadow-lg space-y-6 max-w-2xl">
                   <h2 className="text-lg sm:text-xl font-extrabold italic text-slate-900 text-center leading-snug">
-                    {currentQuestion.texto}
+                    {textoPregunta}
                   </h2>
 
                   {/* Opciones */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
-                    {currentQuestion.opciones.map((op, opIdx) => {
+                    {opcionesPregunta.map((op, opIdx) => {
                       const isSelected = answers[currentQuestion.id] === opIdx;
                       return (
                         <button

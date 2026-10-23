@@ -32,17 +32,21 @@ export const GestionPreguntasRH = () => {
   };
 
   // Cargar Preguntas Registradas
-  const obtenerPreguntas = async () => {
-    try {
-      const res = await fetch('http://localhost:8000/api/admin/preguntas');
-      if (res.ok) {
-        const data = await res.json();
-        setPreguntas(data);
+const obtenerPreguntas = async () => {
+  try {
+    const token = localStorage.getItem("token");
+    const res = await fetch("http://localhost:8000/api/admin/preguntas", {
+      headers: {
+        "Authorization": `Bearer ${token}`
       }
-    } catch (err) {
-      console.error('Error al cargar preguntas:', err);
-    }
-  };
+    });
+    if (!res.ok) throw new Error("Error de autorización");
+    const data = await res.json();
+    setPreguntas(data);
+  } catch (err) {
+    console.error("Error al obtener preguntas de admin:", err);
+  }
+};
 
   // Función helper para obtener el NOMBRE DEL PUESTO a partir de su ID
   const obtenerNombrePuesto = (puestoIdOTexto) => {

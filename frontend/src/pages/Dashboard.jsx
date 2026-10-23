@@ -63,10 +63,15 @@ export const Dashboard = ({ userProfile, score, setScore, onLogout }) => {
       }
 
       if (listaCursosFinal.length === 0) {
+        const puestoUsuario = userProfile?.puesto_id || userProfile?.position || userProfile?.puesto || 'Desarrollador Junior';
+        
         const resIA = await fetch('http://localhost:8000/api/rutas/generar-ia', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ usuario_id: usuarioId })
+          body: JSON.stringify({ 
+            usuario_id: usuarioId,
+            puesto_id: puestoUsuario
+          })
         });
 
         if (resIA.ok) {
@@ -362,7 +367,7 @@ console.log("Perfil recibido en Dashboard:", userProfile);
                 
                 // ✅ Mapeo de justificación desde BD y eliminación de valor estático por defecto
                 const descripcion = esObjeto ? (
-                  curso.justificacion || curso.descripcion || curso.description || curso.desc || ''
+                 curso.descripcion || curso.justificacion || curso.description || curso.desc || ''
                 ) : '';
 
                 const nivel = esObjeto ? (curso.nivel || curso.level || 'General') : 'General';

@@ -8,71 +8,81 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Inicialización del cliente oficial de Google GenAI
 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
 def generar_ruta_aprendizaje(puesto_nombre: str, respuestas_diagnostico: list, cursos_disponibles: list):
     """
-    Genera una ruta de aprendizaje personalizada en formato JSON usando Gemini.
-    Incluye lógica de reintentos para manejar errores temporales 503 (Servidor Ocupado).
+    Genera una ruta de aprendizaje adaptativa basada en el diagnóstico usando Gemini IA.
+    Conserva los atributos originales de la base de datos (URLs, descripciones, duraciones, etc.).
     """
     
-    # 1. Construcción del Prompt
+    # 1. Prompt enriquecido
     prompt = f"""
-    Actúa como un experto en Capacitación y Desarrollo de Talento Humano.
+    Actúa como un Director de Capacitación Organizacional y Experto en Pedagogía.
     
     PUESTO EVALUADO: {puesto_nombre}
-    RESPUESTAS DEL DIAGNÓSTICO: {json.dumps(respuestas_diagnostico, ensure_ascii=False)}
-    CATÁLOGO DE CURSOS DISPONIBLES: {json.dumps(cursos_disponibles, ensure_ascii=False)}
+    RESULTADOS DEL DIAGNÓSTICO (PREGUNTAS Y RESPUESTAS OBTENIDAS):
+    {json.dumps(respuestas_diagnostico, ensure_ascii=False)}
 
-    TAREA:
-    1. Analiza las brechas de conocimiento del usuario según sus respuestas.
-    2. Selecciona de los cursos disponibles los más adecuados para cerrar esas brechas.
-    3. Devuelve la respuesta ÚNICAMENTE en formato JSON estructurado como el siguiente esquema:
+    CATÁLOGO DE CURSOS DISPONIBLES EN LA BASE DE DATOS:
+    {json.dumps(cursos_disponibles, ensure_ascii=False)}
 
+    INSTRUCCIONES:
+    1. Analiza qué temas del diagnóstico respondió mal o con dudas el usuario para identificar sus brechas específicas de conocimiento.
+    2. De los cursos del catálogo, selecciona los más relevantes para cerrar esas brechas y ordénalos pedagógicamente (priorizando las mayores deficiencias).
+    3. Copia el campo 'descripcion' EXACTAMENTE como viene en el catálogo de entrada (NO inventes ni reescribas descripciones nuevas).
+    4. INCLUYE el campo 'justificacion' redactado por ti, explicando brevemente por qué se le asigna dicho curso según sus fallos del diagnóstico.
+
+    ESTRUCTURA OBLIGATORIA DE RESPUESTA (Únicamente JSON válido):
     {{
       "puesto": "{puesto_nombre}",
-      "resumen_brechas": "Breve descripción clínica de las fortalezas y áreas a mejorar.",
+      "resumen_brechas": "Breve análisis clínico del nivel demostrado y áreas a reforzar.",
       "ruta": [
         {{
+          "id": 1,
           "id_curso": 1,
-          "titulo": "Nombre del Curso",
-          "tipo": "OBLIGATORIO",
-          "orden_secuencia": 1,
-          "justificacion": "Razón pedagógica por la que debe tomar este curso",
-          "plazo_dias": 30
+          "titulo": "Nombre del curso tal como viene en el catálogo",
+          "descripcion": "Descripción detallada del curso traída del catálogo",
+          "justificacion": "Razón pedagógica personalizada basada en sus fallos del diagnóstico",
+          "duracion": "Flexible",
+          "nivel": "Principiante",
+          "categoria": "Capacitación",
+          "url_contenido": "https://link-real-del-curso",
+          "orden_secuencia": 1
         }}
       ]
     }}
     """
 
-    # 2. Configuración de Reintentos 
+    # 2. Configuración de Reintentos conservando gemini-3.6-flash
     max_retries = 3
     delay = 2  
 
     for intento in range(max_retries):
         try:
-            
             response = client.models.generate_content(
                 model="gemini-3.6-flash",
                 contents=prompt,
                 config=types.GenerateContentConfig(
-                    response_mime_type="application/json"
+                    response_mime_type="application/json",
+                    temperature=0.3
                 )
             )
-            
             
             texto_limpio = response.text.strip()
             if texto_limpio.startswith("```json"):
                 texto_limpio = texto_limpio.replace("```json", "", 1).rstrip("```").strip()
-            
-            return json.loads(texto_limpio)
+            elif texto_limpio.startswith("```"):
+                texto_limpio = texto_limpio.replace("```", "", 1).rstrip("```").strip()
+
+            datos_ia = json.loads(texto_limpio)
+            print("🤖 [IA SUCCESS] Ruta adaptada correctamente por Gemini.")
+            return datos_ia
 
         except APIError as e:
-            
-            if getattr(e, 'code', None) == 503 and intento < max_retries - 1:
+            if getattr(e, 'code', None) in [503, 429] and intento < max_retries - 1:
                 tiempo_espera = delay * (intento + 1)
-                print(f"[IA Retry] Servidor ocupado (503). Reintentando en {tiempo_espera}s... (Intento {intento + 1}/{max_retries})")
+                print(f"[IA Retry] Servidor saturado ({e.code}). Reintentando en {tiempo_espera}s... ({intento + 1}/{max_retries})")
                 time.sleep(tiempo_espera)
                 continue
             
@@ -80,24 +90,29 @@ def generar_ruta_aprendizaje(puesto_nombre: str, respuestas_diagnostico: list, c
             break
 
         except Exception as e:
-            print(f"Error inesperado al procesar la respuesta de IA: {e}")
+            print(f"Error procesando la respuesta de la IA: {e}")
             break
 
-    # 3. Ruta de Fallback 
-    print("[IA Fallback] Entregando ruta de respaldo predeterminada.")
+    # 3. Fallback con descripciones reales de la BD
+    print("⚠️ [IA Fallback] Asignando cursos directamente desde la BD.")
     return {
         "puesto": puesto_nombre,
-        "resumen_brechas": "No se pudo conectar con el motor de IA en este momento. Se asignan cursos prioritarios del catálogo.",
+        "resumen_brechas": "Asignación inicial basada en catálogo por reajuste momentáneo del motor de IA.",
         "ruta": [
             {
+                "id": c.get("id"),
                 "id_curso": c.get("id"),
                 "titulo": c.get("titulo"),
-                "tipo": "OBLIGATORIO",
-                "orden_secuencia": idx + 1,
-                "justificacion": "Asignación estándar por catálogo debido a mantenimiento temporal de IA.",
-                "plazo_dias": 30
+                "nombre": c.get("titulo"),
+                "descripcion": c.get("descripcion") or "Curso asignado para refuerzo general.",
+                "justificacion": c.get("descripcion") or "Curso recomendado para tu perfil.",
+                "duracion": c.get("duracion") or "Flexible",
+                "nivel": c.get("nivel") or "General",
+                "categoria": c.get("categoria") or "Capacitación",
+                "url_contenido": c.get("url_contenido") or "#",
+                "orden_secuencia": idx + 1
             }
-            for idx, c in enumerate(cursos_disponibles[:3])
+            for idx, c in enumerate(cursos_disponibles)
         ]
     }
     

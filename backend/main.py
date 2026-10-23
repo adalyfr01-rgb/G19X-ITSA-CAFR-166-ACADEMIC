@@ -2,14 +2,20 @@ import json
 import os
 from datetime import date, datetime, timezone
 from typing import List, Optional
-from security import hash_password, verify_password
+from security import (
+    hash_password, 
+    verify_password, 
+    create_access_token, 
+    get_current_user, 
+    require_admin
+)
 from dotenv import load_dotenv
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sqlalchemy import func, text
 from sqlalchemy.orm import Session
-
+import unicodedata
 import models
 from database import Base, engine, get_db
 from models import (
@@ -25,6 +31,8 @@ from models import (
     XAPIStatement,
 )
 from services.ai_adapter import generar_evaluacion_final, generar_ruta_aprendizaje
+from security import create_access_token 
+import urllib.parse
 
 # Carga de variables de entorno (.env)
 load_dotenv()
@@ -48,7 +56,6 @@ class UserRegister(BaseModel):
     nombre: str
     email: str
     password: str
-    rol: str = "empleado"
     departamento: str = ""
     puesto: str = ""
 
@@ -148,7 +155,7 @@ def registrar_usuario(data: UserRegister, db: Session = Depends(get_db)):
         nombre=data.nombre,
         email=data.email,
         password=hashed_pwd,
-        rol=data.rol,
+        rol="empleado",
         departamento=data.departamento,
         puesto=data.puesto
     )
@@ -171,15 +178,21 @@ def registrar_usuario(data: UserRegister, db: Session = Depends(get_db)):
 def login(data: LoginData, db: Session = Depends(get_db)):
     usuario = db.query(models.Usuario).filter(models.Usuario.email == data.email).first()
 
-   # Validar si el usuario existe y si el hash de la contraseña coincide
+    # Validar si el usuario existe y si el hash de la contraseña coincide
     if not usuario or not verify_password(data.password, usuario.password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Correo o contraseña incorrectos."
         )
 
+    # Generar Token JWT
+    token_data = {"sub": str(usuario.id), "email": usuario.email, "rol": usuario.rol}
+    access_token = create_access_token(data=token_data)
+
     return {
         "status": "ok",
+        "access_token": access_token,
+        "token_type": "bearer",
         "user": {
             "id": usuario.id,
             "email": usuario.email,
@@ -189,41 +202,41 @@ def login(data: LoginData, db: Session = Depends(get_db)):
             "puesto": usuario.puesto
         }
     }
-
+    
 @app.get("/api/usuarios/simulador")
 def obtener_usuarios_simulador(db: Session = Depends(get_db)):
     try:
-        
         puestos_db = db.query(models.Puesto).all()
         puestos_map = {str(p.id): p.nombre for p in puestos_db}
 
-        
         usuarios = db.query(models.Usuario).all()
         resultado = []
         
         for u in usuarios:
-            
             val_puesto = getattr(u, 'puesto', None) or getattr(u, 'puesto_id', None)
             val_puesto_str = str(val_puesto) if val_puesto is not None else ""
-
             nombre_puesto = puestos_map.get(val_puesto_str, val_puesto_str or "Sin puesto")
+            rol_usuario = getattr(u, 'rol', 'empleado')
+
+            # GENERAR TOKEN JWT PARA EL SIMULADOR
+            token_simulado = create_access_token({"sub": str(u.id), "rol": rol_usuario})
 
             resultado.append({
                 "id": u.id,
                 "nombre": u.nombre,
                 "email": u.email,
-                "rol": getattr(u, 'rol', 'empleado'),
+                "rol": rol_usuario,
                 "departamento": getattr(u, 'departamento', ''),
                 "puesto": val_puesto,
-                "puesto_nombre": nombre_puesto
+                "puesto_nombre": nombre_puesto,
+                "access_token": token_simulado  # <-- TOKEN AGREGADO AQUÍ
             })
             
         return resultado
 
     except Exception as e:
         print("Error en /api/usuarios/simulador:", e)
-        # Si ocurre cualquier error, devolvemos un listado simple para evitar el error 500
-        usuarios_fallaback = db.query(models.Usuario).all()
+        usuarios_fallback = db.query(models.Usuario).all()
         return [
             {
                 "id": u.id,
@@ -231,9 +244,10 @@ def obtener_usuarios_simulador(db: Session = Depends(get_db)):
                 "email": u.email,
                 "rol": getattr(u, 'rol', 'empleado'),
                 "puesto": getattr(u, 'puesto', ''),
-                "puesto_nombre": getattr(u, 'puesto', '')
+                "puesto_nombre": getattr(u, 'puesto', ''),
+                "access_token": create_access_token({"sub": str(u.id), "rol": getattr(u, 'rol', 'empleado')})
             }
-            for u in usuarios_fallaback
+            for u in usuarios_fallback
         ]
     
 @app.get("/api/perfiles")
@@ -264,7 +278,6 @@ def obtener_perfil_usuario(usuario_id: int, db: Session = Depends(get_db)):
         # 1. Mapas para traducir IDs de puestos y departamentos
         puestos_db = db.query(models.Puesto).all()
         puestos_map = {str(p.id): p for p in puestos_db}
-
         deptos_db = db.query(models.Departamento).all()
         deptos_map = {str(d.id): d.nombre for d in deptos_db}
 
@@ -274,7 +287,7 @@ def obtener_perfil_usuario(usuario_id: int, db: Session = Depends(get_db)):
         
         puesto_obj = puestos_map.get(val_puesto_str)
         nombre_puesto = puesto_obj.nombre if puesto_obj else (val_puesto_str or "Sin Asignar")
-
+      
         # 3. Obtener departamento
         val_depto = getattr(usuario, 'departamento', None) or getattr(usuario, 'departamento_id', None)
         if not val_depto and puesto_obj and hasattr(puesto_obj, 'departamento_id'):
@@ -298,90 +311,175 @@ def obtener_perfil_usuario(usuario_id: int, db: Session = Depends(get_db)):
         print("Error en /api/usuarios/perfil:", e)
         raise HTTPException(status_code=500, detail=f"Error al obtener el perfil de usuario: {str(e)}")
     
-    
-@app.post("/api/rutas/generar-ia")
-def generar_ruta_ia(payload: dict, db: Session = Depends(get_db)):
-    puesto_id = payload.get("puesto_id")
-    usuario_id = payload.get("usuario_id") 
-
-    if not puesto_id:
-        raise HTTPException(status_code=400, detail="El 'puesto_id' es requerido.")
-
-   
-    puesto_db = db.query(models.Puesto).filter(models.Puesto.id == puesto_id).first()
-    
-    if puesto_db:
-        puesto_nombre = puesto_db.nombre
-    else:
-        puesto_nombre = f"Puesto #{puesto_id}"
-
-    cursos_db = db.query(models.Curso).filter(models.Curso.puesto_id == str(puesto_id)).all()
-    
-    if not cursos_db:
-        cursos_db = db.query(models.Curso).all()
-
-    catalogo_cursos = [
-        {
-            "id": c.id,
-            "titulo": c.titulo,
-            "descripcion": getattr(c, 'descripcion', '') or "Sin descripción disponible.",
-            "duracion": getattr(c, 'duracion', '') or "No especificada",
-            "nivel": getattr(c, 'nivel', '') or "General",
-            "categoria": getattr(c, 'categoria', '') or "Capacitación",
-            "puesto_id": getattr(c, 'puesto_id', '') or "",
-            "url_contenido": getattr(c, 'url_contenido', '') or "#",
-            "tipo_contenido": getattr(c, 'tipo_contenido', '') or "Recurso"
-        }
-        for c in cursos_db
-    ]
-
+@app.post("/api/rutas/generar-ia", tags=["Rutas"])
+def generar_ruta_ia(datos: dict, db: Session = Depends(get_db)):
     try:
-        resultado_ia = generar_ruta_aprendizaje(
-            puesto_nombre=puesto_nombre,
-            respuestas_diagnostico=payload.get("respuestas", []),
-            cursos_disponibles=catalogo_cursos
-        )
-    except Exception as e:
-        print(f"Error procesando endpoint de IA: {e}")
-        resultado_ia = {
-            "puesto": puesto_nombre,
-            "resumen_brechas": "No se pudo procesar con IA. Cursos asignados directamente por catálogo.",
-            "ruta": [
-                {
-                    "id_curso": c["id"],
-                    "titulo": c["titulo"],
-                    "tipo": "OBLIGATORIO",
-                    "orden_secuencia": idx + 1,
-                    "justificacion": "Asignado por catálogo por defecto",
-                    "plazo_dias": 30
-                }
-                for idx, c in enumerate(catalogo_cursos[:4])
-            ]
+        puesto_param = datos.get("puesto_id") or datos.get("puesto") or ""
+        usuario_id = datos.get("usuario_id") or datos.get("id_usuario")
+        respuestas_usuario = datos.get("respuestas", {})
+
+        if not puesto_param:
+            raise HTTPException(status_code=400, detail="El 'puesto_id' es requerido.")
+
+        # 1. Búsqueda flexible del puesto
+        puesto_db = None
+        if str(puesto_param).isdigit():
+            puesto_db = db.query(models.Puesto).filter(models.Puesto.id == int(puesto_param)).first()
+        
+        if not puesto_db:
+            puesto_db = db.query(models.Puesto).filter(
+                func.lower(models.Puesto.nombre) == str(puesto_param).lower()
+            ).first()
+
+        puesto_nombre = puesto_db.nombre if puesto_db else str(puesto_param)
+
+        # 2. Cursos disponibles para este puesto
+        cursos_disponibles = db.query(models.Curso).filter(
+            (func.lower(models.Curso.puesto_id) == puesto_nombre.lower()) |
+            (func.lower(models.Curso.puesto_id) == "general")
+        ).all()
+
+        if not cursos_disponibles:
+            cursos_disponibles = db.query(models.Curso).all()
+
+        catalogo_cursos = [
+            {
+                "id": c.id,
+                "id_curso": c.id,
+                "titulo": c.titulo,
+                "nombre": c.titulo,
+                "descripcion": getattr(c, 'descripcion', '') or "Sin descripción disponible.",
+                "justificacion": getattr(c, 'descripcion', '') or "Curso asignado según plan de estudios.",
+                "duracion": getattr(c, 'duracion', '') or "Flexible",
+                "nivel": getattr(c, 'nivel', '') or "General",
+                "categoria": getattr(c, 'categoria', '') or "Capacitación",
+                "puesto_id": getattr(c, 'puesto_id', '') or "",
+                "url_contenido": getattr(c, 'url_contenido', '') or "#",
+                "tipo_contenido": getattr(c, 'tipo_contenido', '') or "Recurso"
+            }
+            for c in cursos_disponibles
+        ]
+
+        preguntas_puesto = db.query(models.Pregunta).filter(
+            func.lower(models.Pregunta.puesto) == puesto_nombre.lower()
+        ).all()
+
+        categorias_falladas = []
+        if isinstance(respuestas_usuario, dict):
+            for p in preguntas_puesto:
+                resp_val = respuestas_usuario.get(str(p.id)) if str(p.id) in respuestas_usuario else respuestas_usuario.get(p.id)
+                if resp_val is not None and int(resp_val) != p.opcion_correcta:
+                    categorias_falladas.append(p.categoria.lower() if p.categoria else "")
+
+        cursos_adaptativos = [
+            c for c in catalogo_cursos 
+            if c["categoria"].lower() in categorias_falladas or any(cat in c["titulo"].lower() for cat in categorias_falladas)
+        ]
+
+        if not cursos_adaptativos:
+            cursos_adaptativos = catalogo_cursos[:1]
+
+# 3. Procesamiento con IA
+        try:
+            resultado_ia = generar_ruta_aprendizaje(
+                puesto_nombre=puesto_nombre,
+                respuestas_diagnostico=respuestas_usuario,
+                cursos_disponibles=catalogo_cursos
+            )
+        except Exception as e_ia:
+            print(f"⚠️ [IA Fallback activado]: {e_ia}")
+            resultado_ia = {"ruta": cursos_adaptativos}
+
+        # Extraer la lista devuelta por la IA
+        lista_ia = resultado_ia.get("ruta") if isinstance(resultado_ia, dict) else resultado_ia
+        if not isinstance(lista_ia, list) or len(lista_ia) == 0:
+            lista_ia = cursos_adaptativos
+            
+
+        #FILTRO ADAPTATIVO PROPORCIONAL Y ESCALABLE
+        
+        
+        ultimo_diag = db.query(models.Diagnostico).filter(
+            models.Diagnostico.usuario_id == int(usuario_id) if usuario_id else True
+        ).order_by(models.Diagnostico.id.desc()).first()
+
+        score_usuario = ultimo_diag.score if ultimo_diag else 100
+        total_cursos_disponibles = len(catalogo_cursos)
+
+        
+        if score_usuario >= 80:
+            
+            cantidad_cursos = max(1, int(total_cursos_disponibles * 0.20))
+        elif score_usuario >= 50:
+            
+            cantidad_cursos = max(1, int(total_cursos_disponibles * 0.50))
+        else:
+            
+            cantidad_cursos = total_cursos_disponibles
+
+       
+        lista_ia = catalogo_cursos[:cantidad_cursos]
+
+        
+        mapa_cursos_db = {c["id"]: c for c in catalogo_cursos}
+        mapa_titulos_db = {c["titulo"].strip().lower(): c for c in catalogo_cursos}
+
+        ruta_final_enriquecida = []
+        for curso_ia in lista_ia:
+            c_id = curso_ia.get("id") or curso_ia.get("id_curso")
+            c_titulo = (curso_ia.get("titulo") or curso_ia.get("nombre") or "").strip().lower()
+            
+            curso_db = mapa_cursos_db.get(c_id) or mapa_titulos_db.get(c_titulo) or {}
+
+            curso_corregido = {
+                **curso_ia,
+                "id": curso_db.get("id", c_id),
+                "id_curso": curso_db.get("id", c_id),
+                "titulo": curso_db.get("titulo") or curso_ia.get("titulo"),
+                "nombre": curso_db.get("titulo") or curso_ia.get("nombre"),
+                "descripcion": curso_db.get("descripcion") or curso_ia.get("descripcion"),
+                "duracion": curso_db.get("duracion") or curso_ia.get("duracion"),
+                "nivel": curso_db.get("nivel") or curso_ia.get("nivel"),
+                "categoria": curso_db.get("categoria") or curso_ia.get("categoria"),
+                "url_contenido": curso_db.get("url_contenido") or curso_ia.get("url_contenido"),
+                "justificacion": curso_ia.get("justificacion") or curso_db.get("descripcion")
+            }
+            ruta_final_enriquecida.append(curso_corregido)
+
+        # 4. Guardar en BD la estructura enriquecida
+        if usuario_id:
+            try:
+                ruta_db = db.query(models.RutaAprendizaje).filter(
+                    models.RutaAprendizaje.id_usuario == int(usuario_id)
+                ).first()
+
+                if not ruta_db:
+                    nueva_ruta = models.RutaAprendizaje(
+                        id_usuario=int(usuario_id),
+                        orden_secuencia_json={"ruta": ruta_final_enriquecida},
+                        fecha_asignacion=date.today()
+                    )
+                    db.add(nueva_ruta)
+                else:
+                    ruta_db.orden_secuencia_json = {"ruta": ruta_final_enriquecida}
+
+                db.commit()
+                print("✅ Ruta adaptativa guardada correctamente en la BD.")
+            except Exception as e_db:
+                db.rollback()
+                print(f"Error al guardar en BD: {e_db}")
+
+        return {
+            "status": "ok",
+            "mensaje": f"Ruta asignada exitosamente para {puesto_nombre}",
+            "ruta": ruta_final_enriquecida,
+            "cursos": ruta_final_enriquecida
         }
 
-    nueva_ruta = None
-    if usuario_id:
-        try:
-            nueva_ruta = models.RutaAprendizaje(
-                id_usuario=int(usuario_id),
-                orden_secuencia_json=resultado_ia,
-                fecha_asignacion=date.today()
-            )
-            db.add(nueva_ruta)
-            db.commit()
-            if nueva_ruta:
-                db.refresh(nueva_ruta)
-
-        except Exception as e:
-            db.rollback()
-            print(f"Error al guardar la ruta en BD: {e}")
-
-    return {
-        "status": "ok",
-        "mensaje": "Ruta generada exitosamente",
-        "id_ruta": nueva_ruta.id_ruta if nueva_ruta else None,
-        "ruta": resultado_ia
-    }
+    except Exception as e:
+        print(f"Error general en generar_ruta_ia: {e}")
+        db.rollback()
+        return {"status": "error", "mensaje": str(e)}
 
 @app.post("/api/diagnostico/guardar")
 def guardar_diagnostico(data: GuardarDiagnosticoRequest, db: Session = Depends(get_db)):
@@ -461,30 +559,27 @@ def eliminar_curso(curso_id: int, db: Session = Depends(get_db)):
     db.commit()
     return {"status": "ok", "mensaje": "Curso eliminado correctamente"}
 
-@app.get("/api/rutas/usuario/{usuario_id}")
+@app.get("/api/rutas/usuario/{usuario_id}", tags=["Rutas"])
 def obtener_ruta_usuario(usuario_id: int, db: Session = Depends(get_db)):
-    # 1. Obtener la última ruta del usuario
+    # 1. Obtener la última ruta guardada
     ruta = db.query(models.RutaAprendizaje)\
              .filter(models.RutaAprendizaje.id_usuario == usuario_id)\
              .order_by(models.RutaAprendizaje.id_ruta.desc())\
              .first()
 
     if not ruta:
-        raise HTTPException(status_code=404, detail="El usuario no tiene una ruta de aprendizaje guardada.")
+        return {
+            "status": "ok",
+            "id_ruta": None,
+            "fecha_asignacion": None,
+            "puntaje": 0,
+            "ruta": []
+        }
 
-    diagnostico = db.query(models.Diagnostico)\
-                    .filter(models.Diagnostico.usuario_id == usuario_id)\
-                    .order_by(models.Diagnostico.id.desc())\
-                    .first()
-
-    puntaje_obtenido = diagnostico.score if diagnostico and diagnostico.score is not None else 0
-
-    todos_los_cursos = db.query(models.Curso).all()
     
-    mapa_urls = {
-        c.titulo.strip().lower(): c.url_contenido 
-        for c in todos_los_cursos if c.titulo and c.url_contenido
-    }
+    todos_los_cursos = db.query(models.Curso).all()
+    mapa_cursos_db = {c.id: c for c in todos_los_cursos}
+    mapa_titulos_db = {c.titulo.strip().lower(): c for c in todos_los_cursos if c.titulo}
 
     datos_json = ruta.orden_secuencia_json or {}
     
@@ -498,39 +593,34 @@ def obtener_ruta_usuario(usuario_id: int, db: Session = Depends(get_db)):
     cursos_enriquecidos = []
     for curso in lista_cursos_raw:
         if isinstance(curso, dict):
+            c_id = curso.get("id") or curso.get("id_curso")
             titulo = (curso.get("nombre") or curso.get("titulo") or "").strip()
-            url_hallada = curso.get("url_contenido")
-            if not url_hallada:
-                for t_db, url_db in mapa_urls.items():
-                    if t_db in titulo.lower() or titulo.lower() in t_db:
-                        url_hallada = url_db
-                        break
             
-            curso["url_contenido"] = url_hallada
-            cursos_enriquecidos.append(curso)
-            
-        elif isinstance(curso, str):
-            titulo = curso.strip()
-            url_hallada = None
-            for t_db, url_db in mapa_urls.items():
-                if t_db in titulo.lower() or titulo.lower() in t_db:
-                    url_hallada = url_db
-                    break
+            curso_db = mapa_cursos_db.get(c_id) or mapa_titulos_db.get(titulo.lower())
 
-            cursos_enriquecidos.append({
-                "nombre": titulo,
-                "url_contenido": url_hallada
-            })
+            curso_enriquecido = {
+                **curso,
+                "id": curso_db.id if curso_db else c_id,
+                "id_curso": curso_db.id if curso_db else c_id,
+                "titulo": curso_db.titulo if curso_db else titulo,
+                "nombre": curso_db.titulo if curso_db else titulo,
+                "descripcion": curso_db.descripcion if curso_db else curso.get("descripcion"), # <-- DESCRIPCIÓN DEL SEED.PY
+                "duracion": curso_db.duracion if curso_db else curso.get("duracion"),
+                "nivel": curso_db.nivel if curso_db else curso.get("nivel"),
+                "categoria": curso_db.categoria if curso_db else curso.get("categoria"),
+                "url_contenido": curso_db.url_contenido if curso_db else curso.get("url_contenido"),
+                "justificacion": curso.get("justificacion") or (curso_db.descripcion if curso_db else "")
+            }
+            cursos_enriquecidos.append(curso_enriquecido)
 
     return {
         "status": "ok",
         "id_ruta": ruta.id_ruta,
         "fecha_asignacion": ruta.fecha_asignacion,
-        "puntaje": puntaje_obtenido,
+        "puntaje": 0,
         "ruta": cursos_enriquecidos
     }
-
-
+    
 def generar_xapi_statement(usuario, curso, estatus: str, calificacion: float = None):
     verbos_xapi = {
         "En progreso": {
@@ -673,9 +763,6 @@ def obtener_progreso_usuario(usuario_id: int, db: Session = Depends(get_db)):
             for p in progresos
         ]
     }
-
-from fastapi import Depends
-from sqlalchemy.orm import Session
 
 @app.get("/api/diagnostico/ultimo/{usuario_id}")
 async def obtener_ultimo_diagnostico(usuario_id: int, db: Session = Depends(get_db)):
@@ -839,27 +926,19 @@ def obtener_xapi_statements(usuario_id: Optional[int] = None, db: Session = Depe
         query = query.filter(XAPIStatement.usuario_id == usuario_id)
         
     statements = query.order_by(XAPIStatement.timestamp.desc()).all()
-
-    # 1. Mapas para traducir IDs a nombres reales desde PostgreSQL
     usuarios_db = db.query(models.Usuario).all()
     usuarios_map = {u.id: u for u in usuarios_db}
-    
     puestos_db = db.query(models.Puesto).all()
     puestos_map = {str(p.id): p.nombre for p in puestos_db}
-
     cursos_map = {c.id: c.titulo for c in db.query(models.Curso).all()}
     
     resultado = []
     for st in statements:
         usuario_obj = usuarios_map.get(st.usuario_id)
         nombre_usuario = usuario_obj.nombre if usuario_obj else (f"Usuario #{st.usuario_id}" if st.usuario_id else "Anónimo")
-
-        # 2. Obtener el puesto real del usuario
         puesto_id_val = getattr(usuario_obj, 'puesto', None) or getattr(usuario_obj, 'puesto_id', None) if usuario_obj else None
         puesto_str = str(puesto_id_val) if puesto_id_val is not None else ""
         nombre_puesto = puestos_map.get(puesto_str, puesto_str or "Sin Asignar")
-
-        # 3. Limpieza de verbos
         verb_clean = (st.verb or "").lower()
         if "completed" in verb_clean or "completó" in verb_clean:
             accion_es = "Completado"
@@ -868,7 +947,7 @@ def obtener_xapi_statements(usuario_id: Optional[int] = None, db: Session = Depe
         else:
             accion_es = st.verb.capitalize() if st.verb else "Interactuó"
 
-        # 4. Limpieza del nombre de la actividad / curso
+    
         obj_str = str(st.object_id or "")
         nombre_curso = obj_str
         if "curso-" in obj_str:
@@ -914,29 +993,47 @@ def registrar_xapi_statement(data: XAPIStatementCreate, db: Session = Depends(ge
         return {"status": "ok", "mensaje": "Statement procesado"}
    
 
-@app.get("/api/evaluaciones/diagnostico/{puesto_id}")
+@app.get("/api/evaluaciones/diagnostico/{puesto_id:path}", tags=["Evaluaciones"])
 def obtener_preguntas_por_puesto(puesto_id: str, db: Session = Depends(get_db)):
-    preguntas = db.query(models.Pregunta).filter(
-        models.Pregunta.puesto == puesto_id
-    ).all()
-    
-    return {
-        "status": "ok",
-        "puesto_id": puesto_id,
-        "total": len(preguntas),
-        "preguntas": [
+    try:
+        puesto_limpio = urllib.parse.unquote(puesto_id).strip()
+
+        # 1. Búsqueda exacta
+        preguntas = db.query(models.Pregunta).filter(
+            func.lower(models.Pregunta.puesto) == puesto_limpio.lower()
+        ).all()
+
+        # 2. Búsqueda 
+        if not preguntas:
+            palabras = [p for p in puesto_limpio.lower().split() if len(p) > 3]
+            for palabra in palabras:
+                preguntas = db.query(models.Pregunta).filter(
+                    func.lower(models.Pregunta.puesto).like(f"%{palabra}%")
+                ).all()
+                if preguntas:
+                    break
+
+        if not preguntas:
+            preguntas = db.query(models.Pregunta).limit(5).all()
+
+        return [
             {
                 "id": p.id,
-                "pregunta": p.texto,       
-                "opciones": p.opciones,    
-                "categoria": p.categoria
+                "pregunta": p.texto,
+                "texto": p.texto,
+                "opciones": p.opciones,
+                "opcion_correcta": p.opcion_correcta,
+                "categoria": p.categoria,
+                "puesto": p.puesto
             }
             for p in preguntas
         ]
-    }
+    except Exception as e:
+        print(f"Error al obtener preguntas: {e}")
+        return []
     
 @app.post("/api/admin/preguntas/crear")
-def crear_pregunta_rh(data: PreguntaCreateRequest, db: Session = Depends(get_db)):
+def crear_pregunta_rh(data: PreguntaCreateRequest, db: Session = Depends(get_db), admin_user: dict = Depends(require_admin)):
     try:
         nueva_p = models.Pregunta(
             puesto=data.puesto,
@@ -1014,7 +1111,6 @@ def evaluar_diagnostico_dinamico(data: EvaluarDiagnosticoRequest, db: Session = 
         "total_preguntas": total
     }
 
-import unicodedata
 def limpiar_texto(texto: str) -> str:
     """Remueve acentos, convierte a minúsculas y elimina espacios extra."""
     if not texto:
@@ -1025,52 +1121,51 @@ def limpiar_texto(texto: str) -> str:
 
 
 @app.get("/api/admin/metrics", tags=["Admin"])
-def obtener_metricas_admin(db: Session = Depends(get_db)):
+def obtener_metricas_admin(db: Session = Depends(get_db), admin_user: dict = Depends(require_admin)):
     try:
-        # 1. Total de empleados 
-        total_empleados = db.query(models.Usuario).filter(models.Usuario.rol == 'empleado').count()
-
-        # 2. Promedio general de Puntaje Diagnóstico 
+        total_empleados = db.query(models.Usuario).filter(models.Usuario.rol == 'empleado').count() 
         promedio_diag = db.query(func.avg(models.Diagnostico.score)).scalar() or 0.0
-
-        # 3. Total de Cursos Completados
         total_cursos_completados = db.query(models.ProgresoCurso).filter(
             func.lower(models.ProgresoCurso.estatus).in_(['completado', 'completed'])
         ).count()
 
-        # 4. Tasa de Aprobación vía xAPI
         total_evaluaciones = db.query(models.XAPIStatement).count()
         aprobados_eval = db.query(models.XAPIStatement).filter(
             models.XAPIStatement.verb.in_(['passed', 'completed'])
         ).count()
         
         tasa_aprobacion = round((aprobados_eval / total_evaluaciones * 100), 1) if total_evaluaciones > 0 else 0.0
-
-      ## 5. Promedio de Diagnóstico agrupado por Departamento 
         diag_por_depto_raw = db.query(
             models.Usuario.departamento,
             models.Diagnostico.score
-        ).join(models.Diagnostico, models.Usuario.id == models.Diagnostico.usuario_id).all()
+        ).outerjoin(models.Diagnostico, models.Usuario.id == models.Diagnostico.usuario_id).all()
 
-        # Agrupamos en Python para unificar sin importar acentos/mayúsculas
         agrupado = {}
         for dep, score in diag_por_depto_raw:
-            dep_limpio = limpiar_texto(dep)
+            if not dep:
+                continue
+                
+            dep_limpio = limpiar_texto(str(dep))
             if dep_limpio not in agrupado:
-                agrupado[dep_limpio] = []
+                agrupado[dep_limpio] = {"nombre_original": str(dep).strip(), "scores": []}
+            
             if score is not None:
-                agrupado[dep_limpio].append(score)
+                try:
+                    score_num = float(score)
+                    if score_num > 0:
+                        agrupado[dep_limpio]["scores"].append(score_num)
+                except ValueError:
+                    pass
 
-        # Formateamos con nombres limpios y bonitos para React
         grafico_departamentos = [
             {
-                "departamento": dep_key.capitalize(),  
-                "promedio": round(sum(scores) / len(scores), 1) if scores else 0.0
+                "departamento": data["nombre_original"],
+                "departamentoNombre": data["nombre_original"], # 👈 Coincide con tu <XAxis dataKey="departamentoNombre" />
+                "promedio": round(sum(data["scores"]) / len(data["scores"]), 1) if len(data["scores"]) > 0 else 0.0
             }
-            for dep_key, scores in agrupado.items()
+            for dep_key, data in agrupado.items()
         ]
 
-        # 6. Estatus Global de Cursos
         total_asignaciones = db.query(models.ProgresoCurso).count()
         pendientes = max(0, total_asignaciones - total_cursos_completados)
 
@@ -1079,7 +1174,6 @@ def obtener_metricas_admin(db: Session = Depends(get_db)):
             {"name": "Pendientes / En Curso", "value": pendientes}
         ]
         
-        # 7. Distribución por Puesto
         puestos_raw = db.query(
             models.Usuario.puesto,
             func.count(models.Usuario.id)
@@ -1090,7 +1184,6 @@ def obtener_metricas_admin(db: Session = Depends(get_db)):
             for p, cant in puestos_raw
         ]
 
-        # 8. Evolución del Aprendizaje en el Tiempo (xAPI por mes)
         evolucion_raw = db.query(
             func.to_char(models.XAPIStatement.timestamp, 'YYYY-MM').label("mes"),
             func.count(models.XAPIStatement.id).label("total")
@@ -1144,7 +1237,7 @@ def obtener_estructura_organizacional(db: Session = Depends(get_db)):
 
 # 2. Crear un nuevo departamento 
 @app.post("/api/admin/departamentos", tags=["Estructura Organizacional"])
-def crear_departamento(datos: DepartamentoCreate, db: Session = Depends(get_db)):
+def agregar_puesto_a_departamento(depto_id: int, datos: PuestoCreate, db: Session = Depends(get_db), admin_user: dict = Depends(require_admin)):
     nombre_limpio = datos.nombre.strip()
     
     depto_existente = db.query(models.Departamento).filter(
@@ -1183,7 +1276,12 @@ def crear_departamento(datos: DepartamentoCreate, db: Session = Depends(get_db))
 
 
 @app.post("/api/admin/departamentos/{depto_id}/puestos", tags=["Estructura Organizacional"])
-def agregar_puesto_a_departamento(depto_id: int, datos: PuestoCreate, db: Session = Depends(get_db)):
+def agregar_puesto_a_departamento(
+    depto_id: int, 
+    datos: PuestoCreate, 
+    db: Session = Depends(get_db),
+    admin_user: dict = Depends(require_admin)
+):
     depto = db.query(models.Departamento).filter(models.Departamento.id == depto_id).first()
     if not depto:
         raise HTTPException(
@@ -1192,7 +1290,6 @@ def agregar_puesto_a_departamento(depto_id: int, datos: PuestoCreate, db: Sessio
         )
         
     puesto_nombre = datos.nombre.strip()
-    
     puesto_existente = db.query(models.Puesto).filter(
         models.Puesto.departamento_id == depto_id,
         func.lower(models.Puesto.nombre) == puesto_nombre.lower()
@@ -1216,7 +1313,7 @@ def agregar_puesto_a_departamento(depto_id: int, datos: PuestoCreate, db: Sessio
         "mensaje": f"Puesto '{nuevo_puesto.nombre}' agregado exitosamente a '{depto.nombre}'",
         "id": nuevo_puesto.id
     }
-
+    
 @app.put("/api/cursos/{curso_id}")
 def actualizar_curso(curso_id: int, curso: CursoCreate, db: Session = Depends(get_db)):
     db_curso = db.query(Curso).filter(Curso.id == curso_id).first()
@@ -1234,7 +1331,7 @@ def actualizar_curso(curso_id: int, curso: CursoCreate, db: Session = Depends(ge
 
 # 1. LISTAR TODAS LAS PREGUNTAS (O FILTRADAS POR PUESTO)
 @app.get("/api/admin/preguntas")
-def obtener_preguntas_rh(puesto: str = None, db: Session = Depends(get_db)):
+def obtener_preguntas_rh(puesto: str = None, db: Session = Depends(get_db), admin_user: dict = Depends(require_admin)):
     try:
         query = db.query(models.Pregunta)
         if puesto:
@@ -1249,7 +1346,7 @@ def obtener_preguntas_rh(puesto: str = None, db: Session = Depends(get_db)):
 
 # 2. EDITAR / ACTUALIZAR PREGUNTA
 @app.put("/api/admin/preguntas/actualizar/{pregunta_id}")
-def actualizar_pregunta_rh(pregunta_id: int, data: PreguntaCreateRequest, db: Session = Depends(get_db)):
+def actualizar_pregunta_rh(pregunta_id: int, data: PreguntaCreateRequest, db: Session = Depends(get_db), admin_user: dict = Depends(require_admin)):
     try:
         pregunta = db.query(models.Pregunta).filter(models.Pregunta.id == pregunta_id).first()
         if not pregunta:
@@ -1278,7 +1375,7 @@ def actualizar_pregunta_rh(pregunta_id: int, data: PreguntaCreateRequest, db: Se
 
 # 3. ELIMINAR PREGUNTA
 @app.delete("/api/admin/preguntas/eliminar/{pregunta_id}")
-def eliminar_pregunta_rh(pregunta_id: int, db: Session = Depends(get_db)):
+def eliminar_pregunta_rh(pregunta_id: int, db: Session = Depends(get_db), admin_user: dict = Depends(require_admin)):
     try:
         pregunta = db.query(models.Pregunta).filter(models.Pregunta.id == pregunta_id).first()
         if not pregunta:
