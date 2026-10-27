@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { apiFetch } from '../api';
 
 export const GestionCursos = () => {
   const [cursos, setCursos] = useState([]);
@@ -7,7 +8,7 @@ export const GestionCursos = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // Nuevo estado para saber si estamos editando un curso
+  // Estado para saber si estamos editando un curso
   const [cursoEditandoId, setCursoEditandoId] = useState(null);
 
   const [form, setForm] = useState({
@@ -28,7 +29,7 @@ export const GestionCursos = () => {
 
   const obtenerEstructura = async () => {
     try {
-      const res = await fetch('http://localhost:8000/api/admin/estructura');
+      const res = await apiFetch('/api/admin/estructura');
       if (res.ok) {
         const data = await res.json();
         setEstructura(data);
@@ -40,7 +41,7 @@ export const GestionCursos = () => {
 
   const obtenerCursos = async () => {
     try {
-      const res = await fetch('http://localhost:8000/api/cursos');
+      const res = await apiFetch('/api/cursos');
       const data = await res.json();
       if (res.ok) setCursos(data.cursos || data || []);
     } catch (error) {
@@ -91,13 +92,11 @@ export const GestionCursos = () => {
       tipo_contenido: curso.tipo_contenido || 'link'
     });
 
-    // Selecciona automáticamente el departamento al que pertenece el puesto
     const depId = encontrarDepartamentoPorPuesto(curso.puesto_id);
     setDepartamentoId(depId);
 
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
-
 
   const resetFormulario = () => {
     setForm({
@@ -134,15 +133,14 @@ export const GestionCursos = () => {
         tipo_contenido: form.tipo_contenido || 'link'
       };
 
-      const url = cursoEditandoId
-        ? `http://localhost:8000/api/cursos/${cursoEditandoId}`
-        : 'http://localhost:8000/api/cursos';
+      const ruta = cursoEditandoId
+        ? `/api/cursos/${cursoEditandoId}`
+        : '/api/cursos';
       
       const method = cursoEditandoId ? 'PUT' : 'POST';
 
-      const res = await fetch(url, {
+      const res = await apiFetch(ruta, {
         method: method,
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
 
@@ -165,7 +163,7 @@ export const GestionCursos = () => {
   const handleEliminar = async (id) => {
     if (!window.confirm('¿Seguro que deseas eliminar este curso?')) return;
     try {
-      const res = await fetch(`http://localhost:8000/api/cursos/${id}`, { method: 'DELETE' });
+      const res = await apiFetch(`/api/cursos/${id}`, { method: 'DELETE' });
       if (res.ok) obtenerCursos();
     } catch (error) {
       console.error('Error al eliminar curso:', error);

@@ -508,7 +508,7 @@ def guardar_diagnostico(data: GuardarDiagnosticoRequest, db: Session = Depends(g
 
 
 @app.post("/api/cursos", status_code=status.HTTP_201_CREATED)
-def crear_curso(curso: CursoCreate, db: Session = Depends(get_db)):
+def crear_curso(curso: CursoCreate, db: Session = Depends(get_db), admin_user: dict = Depends(require_admin)):
     nuevo_curso = models.Curso(**curso.model_dump())
     db.add(nuevo_curso)
     db.commit()
@@ -547,7 +547,7 @@ def obtener_detalle_curso(curso_id: int, db: Session = Depends(get_db)):
     return curso
 
 @app.delete("/api/cursos/{curso_id}")
-def eliminar_curso(curso_id: int, db: Session = Depends(get_db)):
+def eliminar_curso(curso_id: int, db: Session = Depends(get_db), admin_user: dict = Depends(require_admin)):
     curso = db.query(models.Curso).filter(models.Curso.id == curso_id).first()
     if not curso:
         raise HTTPException(status_code=404, detail="El curso no existe.")
@@ -1315,8 +1315,8 @@ def agregar_puesto_a_departamento(
     }
     
 @app.put("/api/cursos/{curso_id}")
-def actualizar_curso(curso_id: int, curso: CursoCreate, db: Session = Depends(get_db)):
-    db_curso = db.query(Curso).filter(Curso.id == curso_id).first()
+def actualizar_curso(curso_id: int, curso: CursoCreate, db: Session = Depends(get_db), admin_user: dict = Depends(require_admin)):
+    db_curso = db.query(models.Curso).filter(models.Curso.id == curso_id).first()
     
     if not db_curso:
         raise HTTPException(status_code=404, detail="Curso no encontrado")

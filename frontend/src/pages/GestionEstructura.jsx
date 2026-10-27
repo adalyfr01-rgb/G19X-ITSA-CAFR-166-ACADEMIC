@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { apiFetch } from '../api';
 
 export const GestionEstructura = () => {
   const [estructura, setEstructura] = useState([]);
@@ -21,7 +22,7 @@ export const GestionEstructura = () => {
 
   const cargarEstructura = async () => {
     try {
-      const res = await fetch('http://localhost:8000/api/admin/estructura');
+      const res = await apiFetch('/api/admin/estructura');
       if (res.ok) {
         const data = await res.json();
         setEstructura(data);
@@ -39,9 +40,8 @@ export const GestionEstructura = () => {
     if (!nombreDepto.trim()) return;
 
     try {
-      const res = await fetch('http://localhost:8000/api/admin/departamentos', {
+      const res = await apiFetch('/api/admin/departamentos', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ nombre: nombreDepto, descripcion: descDepto })
       });
 
@@ -63,9 +63,8 @@ export const GestionEstructura = () => {
     if (!deptoSeleccionado || !nombrePuesto.trim()) return;
 
     try {
-      const res = await fetch(`http://localhost:8000/api/admin/departamentos/${deptoSeleccionado}/puestos`, {
+      const res = await apiFetch(`/api/admin/departamentos/${deptoSeleccionado}/puestos`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ nombre: nombrePuesto })
       });
 
