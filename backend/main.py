@@ -218,9 +218,6 @@ def obtener_usuarios_simulador(db: Session = Depends(get_db)):
             nombre_puesto = puestos_map.get(val_puesto_str, val_puesto_str or "Sin puesto")
             rol_usuario = getattr(u, 'rol', 'empleado')
 
-            # GENERAR TOKEN JWT PARA EL SIMULADOR
-            token_simulado = create_access_token({"sub": str(u.id), "rol": rol_usuario})
-
             resultado.append({
                 "id": u.id,
                 "nombre": u.nombre,
@@ -228,8 +225,8 @@ def obtener_usuarios_simulador(db: Session = Depends(get_db)):
                 "rol": rol_usuario,
                 "departamento": getattr(u, 'departamento', ''),
                 "puesto": val_puesto,
-                "puesto_nombre": nombre_puesto,
-                "access_token": token_simulado  # <-- TOKEN AGREGADO AQUÍ
+                "puesto_nombre": nombre_puesto
+                # ⚠️ Se eliminó "access_token" para evitar la fuga de seguridad
             })
             
         return resultado
@@ -244,12 +241,12 @@ def obtener_usuarios_simulador(db: Session = Depends(get_db)):
                 "email": u.email,
                 "rol": getattr(u, 'rol', 'empleado'),
                 "puesto": getattr(u, 'puesto', ''),
-                "puesto_nombre": getattr(u, 'puesto', ''),
-                "access_token": create_access_token({"sub": str(u.id), "rol": getattr(u, 'rol', 'empleado')})
+                "puesto_nombre": getattr(u, 'puesto', '')
+                # ⚠️ Se eliminó "access_token" del fallback
             }
             for u in usuarios_fallback
         ]
-    
+        
 @app.get("/api/perfiles")
 def obtener_perfiles(db: Session = Depends(get_db)):
     departamentos = db.query(Departamento).all()

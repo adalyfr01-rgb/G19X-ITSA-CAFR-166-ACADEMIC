@@ -1,18 +1,28 @@
 import os
 from datetime import datetime, timedelta, timezone
 from typing import Optional
+from dotenv import load_dotenv
 from passlib.context import CryptContext
 from jose import JWTError, jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
-# Configuración de hashing con bcrypt
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# Cargar variables de entorno del archivo .env
+load_dotenv()
 
-# Configuración de JWT
-SECRET_KEY = os.getenv("JWT_SECRET_KEY", "plurione_secret_key_super_segura_2026")
+# Configuración de JWT sin valor por omisión
+SECRET_KEY = os.getenv("JWT_SECRET_KEY")
+if not SECRET_KEY:
+    raise RuntimeError(
+        "Falta JWT_SECRET_KEY en backend/.env. Genera una con:\n"
+        "python -c \"import secrets; print(secrets.token_hex(32))\""
+    )
+
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 480  # 8 horas de sesión
+
+# Configuración de hashing con bcrypt
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 security_scheme = HTTPBearer()
 
@@ -42,7 +52,7 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         
-        # 1. Extraer sub y asegurarnos de que se convierta correctamente
+        # Extraer sub y asegurarnos de que se convierta correctamente
         sub = payload.get("sub")
         rol: str = payload.get("rol")
 
@@ -55,7 +65,6 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
         return {"id": usuario_id, "rol": rol, "email": payload.get("email")}
 
     except (JWTError, ValueError):
-        # ValueError por si int(sub) falla si viene con un formato no numérico
         raise credentials_exception
 
 def require_admin(current_user: dict = Depends(get_current_user)) -> dict:

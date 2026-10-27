@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Login } from './pages/Login';
+import Login from './pages/Login';
 import { Exam } from './pages/Exam';
 import { Dashboard } from './pages/Dashboard';
 import { PanelRRHH } from './pages/PanelRRHH';
