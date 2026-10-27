@@ -1237,7 +1237,11 @@ def obtener_estructura_organizacional(db: Session = Depends(get_db)):
 
 # 2. Crear un nuevo departamento 
 @app.post("/api/admin/departamentos", tags=["Estructura Organizacional"])
-def agregar_puesto_a_departamento(depto_id: int, datos: PuestoCreate, db: Session = Depends(get_db), admin_user: dict = Depends(require_admin)):
+def crear_departamento(
+    datos: DepartamentoCreate, 
+    db: Session = Depends(get_db), 
+    admin_user: dict = Depends(require_admin)
+):
     nombre_limpio = datos.nombre.strip()
     
     depto_existente = db.query(models.Departamento).filter(
@@ -1258,16 +1262,6 @@ def agregar_puesto_a_departamento(depto_id: int, datos: PuestoCreate, db: Sessio
     db.commit()
     db.refresh(nuevo_depto)
     
-    if datos.puestos:
-        for p_nombre in datos.puestos:
-            if p_nombre.strip():
-                puesto_obj = models.Puesto(
-                    nombre=p_nombre.strip(),
-                    departamento_id=nuevo_depto.id
-                )
-                db.add(puesto_obj)
-        db.commit()
-        
     return {
         "mensaje": "Departamento creado exitosamente", 
         "id": nuevo_depto.id, 
