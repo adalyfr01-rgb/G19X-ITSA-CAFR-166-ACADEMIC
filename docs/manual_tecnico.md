@@ -51,7 +51,7 @@ capacitaciones/
 └── README.md                # Guía rápida de uso del repositorio
 ```
 
-# 3. Configuración de Variables de Entorno (.env)
+## 3. Configuración de Variables de Entorno (.env)
 Para que el backend se conecte correctamente a PostgreSQL, firme tokens de autenticación y comunique con la API de IA, se debe crear un archivo llamado .env dentro de la carpeta backend/ tomando como base el archivo .env.example:
 
 Fragmento de código
@@ -64,7 +64,7 @@ GEMINI_API_KEY=TuClaveDeApiDeGoogleGeminiAqui
 **Clave Secreta para la firma de tokens JWT**
 JWT_SECRET_KEY=tu_clave_secreta_aqui_cambiame_en_produccion
 
-# 4. Guía Paso a Paso de Instalación y Puesta en Marcha
+## 4. Guía Paso a Paso de Instalación y Puesta en Marcha
 Paso 1: Configurar y Desplegar el Backend (Servidor)
 Abrir una terminal y navegar a la carpeta del servidor:
 
@@ -116,7 +116,7 @@ npm run dev
 
 Interfaz web disponible en: http://localhost:5173
 
-# 5. Funcionamiento del Script de Carga Inicial (seed.py)
+## 5. Funcionamiento del Script de Carga Inicial (seed.py)
 El script seed.py permite preparar el entorno de prueba en un solo comando sin necesidad de insertar datos manualmente:
 
 - Estructura de Base de Datos: Detecta las tablas en PostgreSQL y las crea si no existen.
@@ -129,7 +129,7 @@ El script seed.py permite preparar el entorno de prueba en un solo comando sin n
 
 - Seguridad: Genera las contraseñas iniciales con hash seguro (bcrypt).
 
-# 6. Mantenimiento del Sistema
+## 6. Mantenimiento del Sistema
 - Incorporación de Cursos: Nuevos contenidos agregados por el administrador desde el panel web o la base de datos son detectados automáticamente por ai_adapter.py en las recomendaciones de la ruta adaptativa.
 
 - Rotación de Claves: En caso de cambiar la clave de acceso a la API de Gemini, la firma JWT o la contraseña de PostgreSQL, únicamente se edita el archivo .env del backend sin alterar el código fuente.

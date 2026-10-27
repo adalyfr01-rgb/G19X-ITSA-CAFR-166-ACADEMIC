@@ -51,15 +51,23 @@ cd frontend
 npm install
 npm run dev
 ```
+### Configuración de Variables de Entorno del Frontend
+Crea un archivo `.env` dentro de `frontend/` tomando como base `frontend/.env.example`:
+`VITE_API_URL=http://localhost:8000`
 
 Se abre en http://localhost:5173
 
-## Usuarios de prueba
-Administrador (RH): ana.rojas@plurione.com / password123
+## Usuarios de Prueba
 
-Empleado (Dev): carlos.mendoza@plurione.com / password123
+Para probar el sistema, inicia sesión ingresando con **correo electrónico** y **contraseña**:
 
-Empleado (Ventas): mariana.gomez@plurione.com / password123
+### Administradores / Recursos Humanos
+- **Ana Rojas:** `ana.rojas@plurione.com` / `password123`
+
+### Empleados
+- **Carlos Mendoza:** `carlos.mendoza@plurione.com` / `password123`
+- **María López:** `maria.lopez@plurione.com` / `password123`
+- **Juan Pérez:** `juan.perez@plurione.com` / `password123`
 
 ## Lo que todavía no funciona
 El inicio de sesión con cuenta de Microsoft es una simulación de interfaz para fines del entorno de prueba local (no conecta a un Azure Active Directory / Tenant de producción real).

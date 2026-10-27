@@ -31,7 +31,6 @@ from models import (
     XAPIStatement,
 )
 from services.ai_adapter import generar_evaluacion_final, generar_ruta_aprendizaje
-from security import create_access_token 
 import urllib.parse
 
 # Carga de variables de entorno (.env)

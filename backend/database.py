@@ -13,7 +13,7 @@ if not DATABASE_URL:
     raise RuntimeError(
         "ERROR CRÍTICO: La variable DATABASE_URL no está configurada en el archivo .env\n"
         "Crea o verifica el archivo .env dentro de la carpeta backend/ con la siguiente estructura:\n"
-        "DATABASE_URL=postgresql://postgres:tu_password@localhost:5433/capacitacion_db"
+        "DATABASE_URL=postgresql://postgres:tu_password@localhost:5432/capacitacion_db"
     )
 
 engine = create_engine(DATABASE_URL)
