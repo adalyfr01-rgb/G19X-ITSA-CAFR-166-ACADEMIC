@@ -52,17 +52,19 @@ capacitaciones/
 ```
 
 ## 3. Configuración de Variables de Entorno (.env)
-Para que el backend se conecte correctamente a PostgreSQL, firme tokens de autenticación y comunique con la API de IA, se debe crear un archivo llamado .env dentro de la carpeta backend/ tomando como base el archivo .env.example:
 
-Fragmento de código
-**Conexión a Base de Datos PostgreSQL**
+Para que el backend se conecte correctamente a PostgreSQL, firme tokens de autenticación y comunique con la API de IA, se debe crear un archivo llamado `.env` dentro de la carpeta `backend/` tomando como base el archivo `.env.example`:
+
+```env
+# Conexión a Base de Datos PostgreSQL
 DATABASE_URL=postgresql://postgres:tu_password@localhost:5432/capacitacion_db
 
-**Credencial para el Motor de Inteligencia Artificial**
-GEMINI_API_KEY=TuClaveDeApiDeGoogleGeminiAqui
+# Credencial para Google Gemini
+GEMINI_API_KEY=tu_api_key_aqui
 
-**Clave Secreta para la firma de tokens JWT**
-JWT_SECRET_KEY=tu_clave_secreta_aqui_cambiame_en_produccion
+# Llave para firmar los tokens JWT
+JWT_SECRET_KEY=
+```
 
 ## 4. Guía Paso a Paso de Instalación y Puesta en Marcha
 Paso 1: Configurar y Desplegar el Backend (Servidor)
