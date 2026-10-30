@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { apiFetch } from '../api';
 
 export default function Login({ onLogin }) {
   const [email, setEmail] = useState('');
@@ -8,7 +9,7 @@ export default function Login({ onLogin }) {
 
   // Cargar lista del simulador ÚNICAMENTE para autocompletar el correo en la demo
   useEffect(() => {
-    fetch('http://localhost:8000/api/usuarios/simulador')
+    apiFetch('/api/usuarios/simulador')
       .then((res) => res.json())
       .then((data) => setUsuariosSimulador(data))
       .catch(() => {});
@@ -19,10 +20,9 @@ export default function Login({ onLogin }) {
     setError('');
 
     try {
-      // Iniciar sesión llamando a la API con correo y contraseña
-      const res = await fetch('http://localhost:8000/api/auth/login', {
+      // Iniciar sesión llamando a la API mediante apiFetch
+      const res = await apiFetch('/api/auth/login', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password })
       });
 

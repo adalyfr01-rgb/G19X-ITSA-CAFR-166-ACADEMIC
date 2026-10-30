@@ -75,3 +75,15 @@ def require_admin(current_user: dict = Depends(get_current_user)) -> dict:
             detail="Acceso denegado: Se requieren permisos de administrador de RH."
         )
     return current_user
+
+
+def exigir_mismo_usuario(current_user: dict, usuario_id: int) -> None:
+    """
+    Lanza un 403 Forbidden si el usuario autenticado no es 'admin'
+    y su ID no coincide con el usuario_id solicitado.
+    """
+    if current_user.get("rol") != "admin" and int(current_user.get("id")) != int(usuario_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No puedes ver datos de otro usuario."
+        )

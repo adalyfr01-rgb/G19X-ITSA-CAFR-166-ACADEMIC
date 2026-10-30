@@ -3,6 +3,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend, AreaChart, Area
 } from 'recharts';
+import { apiFetch } from '../api';
 
 const COLORS = ['#10B981', '#F59E0B', '#4F46E5', '#EF4444', '#8B5CF6'];
 
@@ -20,20 +21,10 @@ export const AdminDashboard = () => {
     setCargando(true);
     setError(null);
     try {
-      // 1. Obtener el token de autenticación del localStorage
-      const token = localStorage.getItem('token') || localStorage.getItem('access_token');
-      console.log('TOKEN RECUPERADO:', token);
-
-      // 2. Definir los headers con el Bearer Token
-      const headers = {
-        'Content-Type': 'application/json',
-        ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-      };
-
-      // Cargamos métricas y estructura pasando los headers de autorización
+      // Cargamos métricas y estructura usando apiFetch (inyecta el token automáticamente)
       const [resMetricas, resEstructura] = await Promise.all([
-        fetch('http://localhost:8000/api/admin/metrics', { headers }),
-        fetch('http://localhost:8000/api/admin/estructura', { headers })
+        apiFetch('/api/admin/metrics'),
+        apiFetch('/api/admin/estructura')
       ]);
 
       if (!resMetricas.ok) {
@@ -145,7 +136,7 @@ export const AdminDashboard = () => {
           <h2 className="text-lg font-bold text-slate-900">Promedio Diagnóstico por Departamento</h2>
           <div className="h-72 w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={metricas?.graficos?.por_departamento || []}>
+              <BarChart data={datosDepartamento}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
                 <XAxis dataKey="departamentoNombre" tick={{ fontSize: 11 }} />
                 <YAxis domain={[0, 100]} tick={{ fontSize: 12 }} />

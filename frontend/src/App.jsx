@@ -3,6 +3,7 @@ import Login from './pages/Login';
 import { Exam } from './pages/Exam';
 import { Dashboard } from './pages/Dashboard';
 import { PanelRRHH } from './pages/PanelRRHH';
+import { apiFetch } from './api';
 
 export default function App() {
   const [step, setStep] = useState(1); 
@@ -29,13 +30,14 @@ export default function App() {
     setCurrentUser(user);
     localStorage.setItem('pluriUser', JSON.stringify(user));
 
-  if (user?.access_token){
-    localStorage.setItem('token', user.access_token);
-  }
+    // GUARDAR TOKEN PRIMERO para que apiFetch pueda leerlo de inmediato
+    if (user?.access_token) {
+      localStorage.setItem('token', user.access_token);
+    }
 
-   if (user?.rol === 'rh' || user?.rol === 'rrhh' || user?.rol === 'admin') {
-     setStep(5);
-     return;
+    if (user?.rol === 'rh' || user?.rol === 'rrhh' || user?.rol === 'admin') {
+      setStep(5);
+      return;
     }
 
     const userId = user?.id;
@@ -53,8 +55,8 @@ export default function App() {
     setUserProfile(perfilActualizado);
 
     try {
-      // 1. Consultar el último diagnóstico completado en la BD
-      const resDiag = await fetch(`http://localhost:8000/api/diagnostico/ultimo/${userId}`);
+      // 1. Consultar el último diagnóstico usando apiFetch (ya incluye el token)
+      const resDiag = await apiFetch(`/api/diagnostico/ultimo/${userId}`);
       
       if (resDiag.ok) {
         const dataDiag = await resDiag.json();
@@ -68,8 +70,8 @@ export default function App() {
         }
       }
 
-      // 2. Si no tiene examen previo, pedimos las preguntas guardadas por RH en BD
-      const resExam = await fetch(`http://localhost:8000/api/evaluaciones/diagnostico/${puestoMapeado}`);
+      // 2. Si no tiene examen previo, pedimos las preguntas guardadas usando apiFetch
+      const resExam = await apiFetch(`/api/evaluaciones/diagnostico/${puestoMapeado}`);
 
       if (resExam.ok) {
         const dataBD = await resExam.json();
@@ -110,6 +112,7 @@ export default function App() {
   const handleLogout = () => {
     localStorage.removeItem('pluriUser');
     localStorage.removeItem('token');
+    localStorage.removeItem('access_token');
     setCurrentUser(null);
     setUserProfile(null);
     setExamData(null);

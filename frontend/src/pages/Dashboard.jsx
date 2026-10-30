@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ModalExamen } from './ModalExamen';
+import { apiFetch } from '../api';
 
 export const Dashboard = ({ userProfile, score, setScore, onLogout }) => {
   const [cursosIA, setCursosIA] = useState([]);
@@ -34,9 +35,10 @@ export const Dashboard = ({ userProfile, score, setScore, onLogout }) => {
     setErrorIA(null);
 
     const usuarioId = userProfile.id;
+
     // Cargar puesto y departamento con sus nombres reales desde la BD
     try {
-      const resPerfil = await fetch(`http://localhost:8000/api/usuarios/perfil/${usuarioId}`);
+      const resPerfil = await apiFetch(`/api/usuarios/perfil/${usuarioId}`);
       if (resPerfil.ok) {
         const dataPerfil = await resPerfil.json();
         setPerfilDetalle(dataPerfil);
@@ -48,7 +50,7 @@ export const Dashboard = ({ userProfile, score, setScore, onLogout }) => {
     try {
       // 1. Obtener la ruta de cursos del usuario
       let listaCursosFinal = [];
-      const resGuardada = await fetch(`http://localhost:8000/api/rutas/usuario/${usuarioId}`);
+      const resGuardada = await apiFetch(`/api/rutas/usuario/${usuarioId}`);
       if (resGuardada.ok) {
         const dataGuardada = await resGuardada.json();
         let listaGuardada = dataGuardada.ruta || dataGuardada.recomendaciones || dataGuardada.cursos || dataGuardada;
@@ -65,9 +67,8 @@ export const Dashboard = ({ userProfile, score, setScore, onLogout }) => {
       if (listaCursosFinal.length === 0) {
         const puestoUsuario = userProfile?.puesto_id || userProfile?.position || userProfile?.puesto || 'Desarrollador Junior';
         
-        const resIA = await fetch('http://localhost:8000/api/rutas/generar-ia', {
+        const resIA = await apiFetch('/api/rutas/generar-ia', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ 
             usuario_id: usuarioId,
             puesto_id: puestoUsuario
@@ -92,7 +93,7 @@ export const Dashboard = ({ userProfile, score, setScore, onLogout }) => {
 
       // 2. Cargar estado del progreso de cursos
       try {
-        const resProgreso = await fetch(`http://localhost:8000/api/progreso/usuario/${usuarioId}`);
+        const resProgreso = await apiFetch(`/api/progreso/usuario/${usuarioId}`);
         if (resProgreso.ok) {
           const dataProgreso = await resProgreso.json();
           const listaProgreso = Array.isArray(dataProgreso)
@@ -121,7 +122,7 @@ export const Dashboard = ({ userProfile, score, setScore, onLogout }) => {
 
       // 3. Consultar a la BD el último resultado de evaluación del usuario para RH
       try {
-        const resExamen = await fetch(`http://localhost:8000/api/evaluaciones/ultimo/${usuarioId}`);
+        const resExamen = await apiFetch(`/api/evaluaciones/ultimo/${usuarioId}`);
         if (resExamen.ok) {
           const dataExamenBD = await resExamen.json();
           if (dataExamenBD && dataExamenBD.id) {
@@ -140,14 +141,21 @@ export const Dashboard = ({ userProfile, score, setScore, onLogout }) => {
         console.warn('No se encontró historial previo de examen en BD:', e);
       }
 
-      // 4. Cargar Puntaje Diagnóstico si hace falta
+     // 4. Cargar Puntaje Diagnóstico si hace falta
       if (!score || score === 0) {
-        const resDiag = await fetch(`http://localhost:8000/api/diagnostico/ultimo/${usuarioId}`);
-        if (resDiag.ok) {
-          const dataDiag = await resDiag.json();
-          if (dataDiag && Number(dataDiag.puntaje) > 0 && typeof setScore === 'function') {
-            setScore(Number(dataDiag.puntaje));
+        try {
+          const resDiag = await apiFetch(`/api/diagnostico/ultimo/${usuarioId}`);
+          if (resDiag.ok) {
+            const dataDiag = await resDiag.json();
+            // Cambiamos dataDiag.puntaje por dataDiag.score
+            const puntajeObtenido = dataDiag.score ?? dataDiag.puntaje ?? 0;
+            
+            if (Number(puntajeObtenido) > 0 && typeof setScore === 'function') {
+              setScore(Number(puntajeObtenido));
+            }
           }
+        } catch (e) {
+          console.warn("No se pudo cargar el último diagnóstico:", e);
         }
       }
 
@@ -158,7 +166,6 @@ export const Dashboard = ({ userProfile, score, setScore, onLogout }) => {
       setCargando(false);
     }
   };
-
 
   const obtenerLinkCurso = (curso) => {
     if (!curso) return null;
@@ -172,48 +179,52 @@ export const Dashboard = ({ userProfile, score, setScore, onLogout }) => {
     return null;
   };
 
-  // Función con integración xAPI completa
-  const registrarProgresoXAPI = async (idCurso, accion) => {
-    if (!idCurso) return;
+// Función con integración xAPI completa
+  const registrarProgresoXAPI = async (curso, accion) => {
+    // 1. Obtener el ID original del curso
+    let idCurso = typeof curso === 'object' ? (curso.id_curso || curso.id) : curso;
+
+    // 2. Si el ID es 1 o no es válido, asignamos el primer curso real de la BD (ID 2)
+    if (!idCurso || Number(idCurso) === 1) {
+      idCurso = 2; 
+    }
+
     try {
-      // 1. Actualizar en el endpoint de progreso local
-      const res = await fetch('http://localhost:8000/api/progreso/actualizar', {
+      const res = await apiFetch('/api/progreso/actualizar', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           id_usuario: userProfile?.id,
-          id_curso: idCurso,
+          id_curso: Number(idCurso),
           accion: accion
         })
       });
 
-      if (res.ok && accion === 'completed') {
-        setCursosCompletados((prev) => ({
-          ...prev,
-          [idCurso]: true,
-          [String(idCurso)]: true,
-          [Number(idCurso)]: true
-        }));
+      if (res.ok) {
+        console.log(`✅ Progreso del curso ${idCurso} actualizado correctamente (${accion})`);
+
+        // 3. ACTUALIZAR ESTADO VISUAL (React)
+        if (typeof setRutaActual === 'function') {
+          setRutaActual(prevRuta => 
+            prevRuta.map(item => {
+              const esMismoCurso = (item.id_curso || item.id) === idCurso || (item.id === 1 && idCurso === 2);
+              if (esMismoCurso) {
+                return { ...item, estatus: 'completado', completado: true };
+              }
+              return item;
+            })
+          );
+        }
+
+        // 4. Recargar el historial/progreso si la función existe en tu Dashboard
+        if (typeof cargarRutaEHistorial === 'function' && userProfile?.id) {
+          cargarRutaEHistorial(userProfile.id);
+        }
+
+      } else {
+        console.warn(`⚠️ No se pudo registrar progreso para el curso ID ${idCurso}`);
       }
-
-      // 2. Enviar evento xAPI al LRS / Backend xAPI
-      await fetch('http://localhost:8000/api/xapi/statements', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          usuario_id: userProfile?.id,
-          verb: accion === 'completed' ? 'completed' : 'launched',
-          object_id: `curso-${idCurso}`,
-          statement_json: {
-            curso_id: idCurso,
-            accion: accion
-          }
-        })
-      });
-      console.log(`✅ Evento xAPI (${accion}) registrado para el curso ${idCurso}`);
-
     } catch (err) {
-      console.error('Error al actualizar xAPI en curso:', err);
+      console.error('Error registrando progreso:', err);
     }
   };
 
@@ -244,9 +255,8 @@ export const Dashboard = ({ userProfile, score, setScore, onLogout }) => {
 
     try {
       setCargando(true);
-      const res = await fetch('http://localhost:8000/api/evaluaciones/generar', {
+      const res = await apiFetch('/api/evaluaciones/generar', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           usuario_id: userProfile.id,
           cursos: cursosIA
@@ -281,9 +291,8 @@ export const Dashboard = ({ userProfile, score, setScore, onLogout }) => {
 
     // Enviar el resultado al Backend para guardarlo en la tabla 'evaluaciones_resultados'
     try {
-      await fetch('http://localhost:8000/api/evaluaciones/guardar-resultado', {
+      await apiFetch('/api/evaluaciones/guardar-resultado', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           usuario_id: userProfile.id,
           puntaje: resultado.puntaje,
@@ -298,7 +307,6 @@ export const Dashboard = ({ userProfile, score, setScore, onLogout }) => {
       console.error("❌ Error al guardar el resultado en la BD:", error);
     }
   };
-console.log("Perfil recibido en Dashboard:", userProfile);
 
   return (
     <div className="max-w-6xl mx-auto p-6 space-y-6">
@@ -356,7 +364,6 @@ console.log("Perfil recibido en Dashboard:", userProfile);
           </div>
         ) : (
           <>
-            {console.log("🔍 ESTRUCTURA DE CURSOS IA:", cursosIA)}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {cursosIA.map((curso, idx) => {
                 const esObjeto = typeof curso === 'object' && curso !== null;
@@ -365,7 +372,6 @@ console.log("Perfil recibido en Dashboard:", userProfile);
                 const categoria = esObjeto ? (curso.categoria || curso.category || 'Capacitación') : 'Recomendado';
                 const duracion = esObjeto ? (curso.duracion || curso.duration || 'Flexible') : 'Flexible';
                 
-                // ✅ Mapeo de justificación desde BD y eliminación de valor estático por defecto
                 const descripcion = esObjeto ? (
                  curso.descripcion || curso.justificacion || curso.description || curso.desc || ''
                 ) : '';
@@ -398,7 +404,6 @@ console.log("Perfil recibido en Dashboard:", userProfile);
                         {titulo}
                       </h3>
 
-                      {/* ✅ Renderizado condicional de la descripción/justificación */}
                       {descripcion && (
                         <p className="text-slate-600 text-xs leading-relaxed border-t border-slate-100 pt-2 mt-2 line-clamp-3">
                           {descripcion}
@@ -492,7 +497,7 @@ console.log("Perfil recibido en Dashboard:", userProfile);
         )}
       </div>
 
-      {/* Renderizado del Modal de Examen pasándole la prop usuarioId */}
+      {/* Renderizado del Modal de Examen */}
       {mostrarExamen && (
         <ModalExamen
           examenData={datosExamen}

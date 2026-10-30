@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { apiFetch } from '../api';
 
 export const ModalExamen = ({ examenData, intentosRestantes, onClose, FinalizarExamen, usuarioId }) => {
   const [preguntaActual, setPreguntaActual] = useState(0);
@@ -38,12 +39,11 @@ export const ModalExamen = ({ examenData, intentosRestantes, onClose, FinalizarE
     setResultado(res);
     setExamenEnviado(true);
 
-    // 1. Enviar evento xAPI al Backend
+    // 1. Enviar evento xAPI al Backend usando apiFetch (inyecta automáticamente el Bearer token)
     try {
       const activeUserId = usuarioId || 1;
-      await fetch('http://localhost:8000/api/xapi/statements', {
+      await apiFetch('/api/xapi/statements', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           usuario_id: activeUserId,
           verb: aprobado ? 'passed' : 'failed',

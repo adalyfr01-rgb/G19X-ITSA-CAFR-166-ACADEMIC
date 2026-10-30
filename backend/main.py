@@ -7,7 +7,8 @@ from security import (
     verify_password, 
     create_access_token, 
     get_current_user, 
-    require_admin
+    require_admin,
+    exigir_mismo_usuario
 )
 from dotenv import load_dotenv
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, status
@@ -265,7 +266,8 @@ def obtener_perfiles(db: Session = Depends(get_db)):
     }
 
 @app.get("/api/usuarios/perfil/{usuario_id}")
-def obtener_perfil_usuario(usuario_id: int, db: Session = Depends(get_db)):
+def obtener_perfil_usuario(usuario_id: int, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    exigir_mismo_usuario(current_user, usuario_id)
     try:
         usuario = db.query(models.Usuario).filter(models.Usuario.id == usuario_id).first()
         if not usuario:
@@ -308,7 +310,11 @@ def obtener_perfil_usuario(usuario_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Error al obtener el perfil de usuario: {str(e)}")
     
 @app.post("/api/rutas/generar-ia", tags=["Rutas"])
-def generar_ruta_ia(datos: dict, db: Session = Depends(get_db)):
+def generar_ruta_ia(datos: dict, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    usuario_id = datos.get("usuario_id") or datos.get("id_usuario")
+    if usuario_id:
+        exigir_mismo_usuario(current_user, usuario_id)
+        
     try:
         puesto_param = datos.get("puesto_id") or datos.get("puesto") or ""
         usuario_id = datos.get("usuario_id") or datos.get("id_usuario")
@@ -478,7 +484,9 @@ def generar_ruta_ia(datos: dict, db: Session = Depends(get_db)):
         return {"status": "error", "mensaje": str(e)}
 
 @app.post("/api/diagnostico/guardar")
-def guardar_diagnostico(data: GuardarDiagnosticoRequest, db: Session = Depends(get_db)):
+def guardar_diagnostico(data: GuardarDiagnosticoRequest, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    exigir_mismo_usuario(current_user, data.usuario_id)
+        
     usuario = db.query(models.Usuario).filter(models.Usuario.id == data.usuario_id).first()
     if not usuario:
         raise HTTPException(status_code=404, detail="El usuario especificado no existe.")
@@ -556,7 +564,9 @@ def eliminar_curso(curso_id: int, db: Session = Depends(get_db), admin_user: dic
     return {"status": "ok", "mensaje": "Curso eliminado correctamente"}
 
 @app.get("/api/rutas/usuario/{usuario_id}", tags=["Rutas"])
-def obtener_ruta_usuario(usuario_id: int, db: Session = Depends(get_db)):
+def obtener_ruta_usuario(usuario_id: int, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    exigir_mismo_usuario(current_user, usuario_id)
+    
     # 1. Obtener la última ruta guardada
     ruta = db.query(models.RutaAprendizaje)\
              .filter(models.RutaAprendizaje.id_usuario == usuario_id)\
@@ -667,21 +677,36 @@ def generar_xapi_statement(usuario, curso, estatus: str, calificacion: float = N
     return statement
 
 @app.post("/api/progreso/actualizar")
-def actualizar_progreso(payload: dict, db: Session = Depends(get_db)):
-    usuario_id = payload.get("id_usuario")
-    curso_id = payload.get("id_curso")
+def actualizar_progreso(payload: dict, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    # 1. Obtener y asegurar conversión a entero de los IDs
+    raw_usuario_id = payload.get("id_usuario") or payload.get("usuario_id")
+    raw_curso_id = payload.get("id_curso") or payload.get("curso_id")
+
+    if not raw_usuario_id or not raw_curso_id:
+        raise HTTPException(status_code=400, detail="id_usuario e id_curso son requeridos.")
+
+    try:
+        usuario_id = int(raw_usuario_id)
+        curso_id = int(raw_curso_id)
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=400, detail="Los IDs deben ser números enteros válidos.")
+
+    # 2. Validar que sea el mismo usuario
+    exigir_mismo_usuario(current_user, usuario_id)
+    
     accion = payload.get("accion")  
     calificacion = payload.get("calificacion", None)
 
-    if not usuario_id or not curso_id:
-        raise HTTPException(status_code=400, detail="id_usuario e id_curso son requeridos.")
-
+    # 3. Buscar Usuario y Curso
     usuario = db.query(models.Usuario).filter(models.Usuario.id == usuario_id).first()
     curso = db.query(models.Curso).filter(models.Curso.id == curso_id).first()
 
-    if not usuario or not curso:
-        raise HTTPException(status_code=404, detail="Usuario o Curso no encontrado.")
+    if not usuario:
+        raise HTTPException(status_code=404, detail=f"Usuario con ID {usuario_id} no encontrado.")
+    if not curso:
+        raise HTTPException(status_code=404, detail=f"Curso con ID {curso_id} no encontrado.")
 
+    # 4. Determinar estatus
     if accion == "completed":
         nuevo_estatus = "completado"
         verb_id = "http://adlnet.gov/expapi/verbs/completed"
@@ -691,6 +716,7 @@ def actualizar_progreso(payload: dict, db: Session = Depends(get_db)):
         verb_id = "http://adlnet.gov/expapi/verbs/launched"
         verb_display = {"en-US": "inició"}
 
+    # 5. Obtener dinámicamente el modelo de Progreso
     progreso_model = getattr(models, "ProgresoCurso", getattr(models, "Progreso", None))
     progreso = db.query(progreso_model).filter(
         progreso_model.id_usuario == usuario_id,
@@ -715,6 +741,7 @@ def actualizar_progreso(payload: dict, db: Session = Depends(get_db)):
 
     db.commit()
 
+    # 6. Generar Statement xAPI
     xapi_statement = {
         "actor": {
             "objectType": "Agent",
@@ -724,10 +751,10 @@ def actualizar_progreso(payload: dict, db: Session = Depends(get_db)):
         "verb": {"id": verb_id, "display": verb_display},
         "object": {
             "objectType": "Activity",
-            "id": curso.url_contenido or f"http://empresa.com/cursos/{curso.id}",
+            "id": getattr(curso, "url_contenido", None) or f"http://empresa.com/cursos/{curso.id}",
             "definition": {
-                "name": {"es-ES": curso.titulo},
-                "description": {"es-ES": f"Capacitación en {curso.titulo}"},
+                "name": {"es-ES": getattr(curso, "titulo", getattr(curso, "nombre", "Curso"))},
+                "description": {"es-ES": f"Capacitación"},
                 "type": "http://adlnet.gov/expapi/activities/course"
             }
         },
@@ -761,7 +788,8 @@ def obtener_progreso_usuario(usuario_id: int, db: Session = Depends(get_db)):
     }
 
 @app.get("/api/diagnostico/ultimo/{usuario_id}")
-async def obtener_ultimo_diagnostico(usuario_id: int, db: Session = Depends(get_db)):
+async def obtener_ultimo_diagnostico(usuario_id: int, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    exigir_mismo_usuario(current_user, usuario_id)
     try:
     
         query = text("""
@@ -782,7 +810,8 @@ async def obtener_ultimo_diagnostico(usuario_id: int, db: Session = Depends(get_
         return {"mensaje": "Error en servidor", "score": 0}
     
 @app.get("/api/diagnostico/usuario/{usuario_id}")
-def obtener_diagnosticos_usuario(usuario_id: int, db: Session = Depends(get_db)):
+def obtener_diagnosticos_usuario(usuario_id: int, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    exigir_mismo_usuario(current_user, usuario_id)
     registros = db.query(models.Diagnostico).filter(models.Diagnostico.usuario_id == usuario_id).all()
     return registros
 
@@ -845,7 +874,8 @@ def api_generar_evaluacion(payload: dict, db: Session = Depends(get_db)):
     }
 
 @app.post("/api/evaluaciones/guardar-resultado")
-async def guardar_resultado(datos: ResultadoExamenSchema, db: Session = Depends(get_db)):
+async def guardar_resultado(datos: ResultadoExamenSchema, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    exigir_mismo_usuario(current_user, datos.usuario_id)
     try:
         query = text("""
             INSERT INTO evaluaciones_resultados 
@@ -871,7 +901,8 @@ async def guardar_resultado(datos: ResultadoExamenSchema, db: Session = Depends(
 
 
 @app.get("/api/evaluaciones/ultimo/{usuario_id}")
-async def obtener_ultimo_examen(usuario_id: int, db: Session = Depends(get_db)):
+async def obtener_ultimo_examen(usuario_id: int, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    exigir_mismo_usuario(current_user, usuario_id)
     try:
         query = text("""
             SELECT id, usuario_id, puntaje, aciertos, total_preguntas, aprobado, intentos_restantes
@@ -916,7 +947,13 @@ async def obtener_ultimo_examen(usuario_id: int, db: Session = Depends(get_db)):
         }
         
 @app.get("/api/xapi/statements")
-def obtener_xapi_statements(usuario_id: Optional[int] = None, db: Session = Depends(get_db)):
+def obtener_xapi_statements(usuario_id: Optional[int] = None, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
+   # Si no pasa usuario_id y no es admin, forzamos su propio ID
+    if current_user.get("rol") != "admin":
+        usuario_id = int(current_user["id"])
+    elif usuario_id is not None:
+        exigir_mismo_usuario(current_user, usuario_id)
+   
     query = db.query(XAPIStatement)
     if usuario_id is not None:
         query = query.filter(XAPIStatement.usuario_id == usuario_id)
@@ -970,7 +1007,10 @@ def obtener_xapi_statements(usuario_id: Optional[int] = None, db: Session = Depe
     return resultado
 
 @app.post("/api/xapi/statements")
-def registrar_xapi_statement(data: XAPIStatementCreate, db: Session = Depends(get_db)):
+def registrar_xapi_statement(data: XAPIStatementCreate, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    if data.usuario_id:
+        exigir_mismo_usuario(current_user, data.usuario_id)
+    
     try:
         nuevo_statement = XAPIStatement(
             usuario_id=data.usuario_id,
@@ -1058,7 +1098,10 @@ def crear_pregunta_rh(data: PreguntaCreateRequest, db: Session = Depends(get_db)
         )
         
 @app.post("/api/evaluaciones/diagnostico/evaluar")
-def evaluar_diagnostico_dinamico(data: EvaluarDiagnosticoRequest, db: Session = Depends(get_db)):
+def evaluar_diagnostico_dinamico(data: EvaluarDiagnosticoRequest, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    if data.usuario_id:
+        exigir_mismo_usuario(current_user, data.usuario_id)
+        
     aciertos = 0
     total = len(data.respuestas)
     
@@ -1219,7 +1262,7 @@ app.include_router(router)
 
 # 1. Obtener la lista completa de departamentos con sus puestos
 @app.get("/api/admin/estructura", tags=["Estructura Organizacional"])
-def obtener_estructura_organizacional(db: Session = Depends(get_db)):
+def obtener_estructura_organizacional(db: Session = Depends(get_db), admin_user: dict = Depends(require_admin)):
     deptos = db.query(models.Departamento).all()
     resultado = []
     for d in deptos:

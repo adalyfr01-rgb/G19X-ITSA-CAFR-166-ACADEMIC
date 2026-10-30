@@ -27,7 +27,7 @@ dist-ssr
 venv/
 __pycache__/
 *.pyc
-
+venv2/
 # Archivos de entorno y variables secretas
 .env
 .env.local

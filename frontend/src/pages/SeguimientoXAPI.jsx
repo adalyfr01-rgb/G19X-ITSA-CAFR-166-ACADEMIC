@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { apiFetch } from '../api';
 
 export const SeguimientoXAPI = () => {
   const [logs, setLogs] = useState([]);
@@ -14,10 +15,11 @@ export const SeguimientoXAPI = () => {
     setLoading(true);
     try {
       const url = usuarioId 
-        ? `http://localhost:8000/api/xapi/statements?usuario_id=${usuarioId}`
-        : `http://localhost:8000/api/xapi/statements`;
+        ? `/api/xapi/statements?usuario_id=${usuarioId}`
+        : `/api/xapi/statements`;
 
-      const res = await fetch(url);
+      // Se usa apiFetch para adjuntar automáticamente el Bearer Token
+      const res = await apiFetch(url);
       if (res.ok) {
         const data = await res.json();
         setLogs(Array.isArray(data) ? data : data.statements || []);
@@ -27,7 +29,7 @@ export const SeguimientoXAPI = () => {
     } catch (e) {
       console.error("Error al obtener registros xAPI:", e);
       setLogs([]);
-    } finally {
+    }finally {
       setLoading(false);
     }
   };
