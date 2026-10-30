@@ -109,6 +109,7 @@ export default function App() {
 
   const handleLogout = () => {
     localStorage.removeItem('pluriUser');
+    localStorage.removeItem('token');
     setCurrentUser(null);
     setUserProfile(null);
     setExamData(null);

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { apiFetch } from '../api';
 
 export const GestionPreguntasRH = () => {
   const [estructura, setEstructura] = useState([]);
@@ -21,7 +22,7 @@ export const GestionPreguntasRH = () => {
   // Cargar Estructura Organizacional
   const obtenerEstructura = async () => {
     try {
-      const res = await fetch('http://localhost:8000/api/admin/estructura');
+      const res = await apiFetch('/api/admin/estructura');
       if (res.ok) {
         const data = await res.json();
         setEstructura(data);
@@ -32,21 +33,16 @@ export const GestionPreguntasRH = () => {
   };
 
   // Cargar Preguntas Registradas
-const obtenerPreguntas = async () => {
-  try {
-    const token = localStorage.getItem("token");
-    const res = await fetch("http://localhost:8000/api/admin/preguntas", {
-      headers: {
-        "Authorization": `Bearer ${token}`
-      }
-    });
-    if (!res.ok) throw new Error("Error de autorización");
-    const data = await res.json();
-    setPreguntas(data);
-  } catch (err) {
-    console.error("Error al obtener preguntas de admin:", err);
-  }
-};
+  const obtenerPreguntas = async () => {
+    try {
+      const res = await apiFetch('/api/admin/preguntas');
+      if (!res.ok) throw new Error("Error de autorización");
+      const data = await res.json();
+      setPreguntas(data);
+    } catch (err) {
+      console.error("Error al obtener preguntas de admin:", err);
+    }
+  };
 
   // Función helper para obtener el NOMBRE DEL PUESTO a partir de su ID
   const obtenerNombrePuesto = (puestoIdOTexto) => {
@@ -105,15 +101,14 @@ const obtenerPreguntas = async () => {
     };
 
     const url = idEditando
-      ? `http://localhost:8000/api/admin/preguntas/actualizar/${idEditando}`
-      : 'http://localhost:8000/api/admin/preguntas/crear';
+      ? `/api/admin/preguntas/actualizar/${idEditando}`
+      : '/api/admin/preguntas/crear';
 
     const method = idEditando ? 'PUT' : 'POST';
 
     try {
-      const res = await fetch(url, {
+      const res = await apiFetch(url, {
         method,
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
 
@@ -158,7 +153,7 @@ const obtenerPreguntas = async () => {
   const handleEliminar = async (id) => {
     if (window.confirm("¿Estás seguro de que deseas eliminar esta pregunta del diagnóstico?")) {
       try {
-        const res = await fetch(`http://localhost:8000/api/admin/preguntas/eliminar/${id}`, {
+        const res = await apiFetch(`/api/admin/preguntas/eliminar/${id}`, {
           method: 'DELETE'
         });
 
