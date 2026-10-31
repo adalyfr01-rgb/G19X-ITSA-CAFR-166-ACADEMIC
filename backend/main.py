@@ -137,6 +137,9 @@ class DepartamentoCreate(BaseModel):
     descripcion: Optional[str] = None
     puestos: Optional[List[str]] = []
     
+class CompletarCursoSchema(BaseModel):
+    usuario_id: int
+    curso_id: int
 
 @app.get("/")
 def home():
@@ -491,28 +494,42 @@ def guardar_diagnostico(data: GuardarDiagnosticoRequest, db: Session = Depends(g
     if not usuario:
         raise HTTPException(status_code=404, detail="El usuario especificado no existe.")
 
-    nuevo_diagnostico = models.Diagnostico(
-        usuario_id=data.usuario_id,
-        puesto_evaluado=data.puesto_id,
-        score=data.score
-    )
+    # 1. Guardar o actualizar en la tabla diagnosticos
+    diag_existente = db.query(models.Diagnostico).filter(models.Diagnostico.usuario_id == data.usuario_id).first()
+    
+    if diag_existente:
+        diag_existente.score = data.score
+        diag_existente.puesto_evaluado = str(data.puesto_id)
+        nuevo_diagnostico = diag_existente
+    else:
+        nuevo_diagnostico = models.Diagnostico(
+            usuario_id=data.usuario_id,
+            puesto_evaluado=str(data.puesto_id),
+            score=data.score
+        )
+        db.add(nuevo_diagnostico)
 
-    db.add(nuevo_diagnostico)
+    # 2. Registrar evento xAPI SIN enviar 'score' ni 'activity' como argumentos directos
+    try:
+        statement_xapi = models.XAPIStatement(
+        usuario_id=data.usuario_id,
+        verb="completed",
+        object_id="diagnostico-inicial",
+        statement_json={
+            "actor": usuario.email,
+            "verb": "completed",
+            "object": "diagnostico-inicial",
+            "score": float(data.score)
+        }
+    )
+        db.add(statement_xapi)
+    except Exception as e:
+        print(f"Aviso xAPI: {e}")
+
     db.commit()
     db.refresh(nuevo_diagnostico)
 
-    return {
-        "status": "ok",
-        "mensaje": "Diagnóstico registrado exitosamente",
-        "diagnostico": {
-            "id": nuevo_diagnostico.id,
-            "usuario_id": nuevo_diagnostico.usuario_id,
-            "puesto_id": nuevo_diagnostico.puesto_evaluado,
-            "score": nuevo_diagnostico.score,
-            "fecha": nuevo_diagnostico.fecha
-        }
-    }
-
+    return {"status": "ok", "diagnostico": {"score": nuevo_diagnostico.score}}
 
 @app.post("/api/cursos", status_code=status.HTTP_201_CREATED)
 def crear_curso(curso: CursoCreate, db: Session = Depends(get_db), admin_user: dict = Depends(require_admin)):
@@ -1431,3 +1448,61 @@ def eliminar_pregunta_rh(pregunta_id: int, db: Session = Depends(get_db), admin_
             detail=f"Error al eliminar la pregunta: {str(e)}"
         )
         
+
+@app.post("/api/cursos/completar")
+def completar_curso(
+    data: CompletarCursoSchema, 
+    db: Session = Depends(get_db), 
+    current_user: dict = Depends(get_current_user)
+):
+    exigir_mismo_usuario(current_user, data.usuario_id)
+
+    # 1. Registrar o actualizar progreso del curso
+    progreso = db.query(models.ProgresoCurso).filter(
+        models.ProgresoCurso.id_usuario == data.usuario_id,
+        models.ProgresoCurso.id_curso == data.curso_id
+    ).first()
+
+    if not progreso:
+        progreso = models.ProgresoCurso(
+            id_usuario=data.usuario_id,
+            id_curso=data.curso_id,
+            estatus="completado"
+        )
+        db.add(progreso)
+    else:
+        progreso.estatus = "completado"
+
+    # 2. Construir la estructura estándar del Statement de xAPI
+    payload_xapi = {
+        "actor": {
+            "account": {
+                "homePage": "http://plurione.com",
+                "name": str(data.usuario_id)
+            },
+            "objectType": "Agent"
+        },
+        "verb": {
+            "id": "http://adlnet.gov/expapi/verbs/completed",
+            "display": {"en-US": "completed"}
+        },
+        "object": {
+            "id": f"http://plurione.com/courses/{data.curso_id}",
+            "definition": {
+                "name": {"es-MX": f"Curso {data.curso_id}"}
+            },
+            "objectType": "Activity"
+        }
+    }
+
+    # 3. Crear el XAPIStatement agregando la cadena JSON requerida
+    statement_xapi = models.XAPIStatement(
+        usuario_id=data.usuario_id,
+        verb="completed",
+        object_id=f"curso-{data.curso_id}",
+        statement_json=json.dumps(payload_xapi) # <--- CAMPO OBLIGATORIO
+    )
+    db.add(statement_xapi)
+
+    db.commit()
+    return {"status": "ok", "mensaje": "Curso marcado como completado de forma persistente."}

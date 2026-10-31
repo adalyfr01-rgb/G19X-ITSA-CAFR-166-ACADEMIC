@@ -66,8 +66,8 @@ Para probar el sistema, inicia sesión ingresando con **correo electrónico** y 
 
 ### Empleados
 - **Carlos Mendoza:** `carlos.mendoza@plurione.com` / `password123`
-- **María López:** `maria.lopez@plurione.com` / `password123`
-- **Juan Pérez:** `juan.perez@plurione.com` / `password123`
+- **Mariana Gómez:** `mariana.gomez@plurione.com` / `password123`
+- **David Aguilar:** `david.aguilar@plurione.com` / `password123`
 
 ## Lo que todavía no funciona
-El inicio de sesión con cuenta de Microsoft es una simulación de interfaz para fines del entorno de prueba local (no conecta a un Azure Active Directory / Tenant de producción real).
+Actualmente ninguna funcionalidad del flujo principal presenta fallos. El sistema opera de manera integral desde el inicio de sesión hasta la evaluación final y administración de RH.

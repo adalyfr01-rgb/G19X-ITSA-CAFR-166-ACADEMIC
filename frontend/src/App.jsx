@@ -25,12 +25,11 @@ export default function App() {
     }
   }, []);
 
-  const handleLogin = async (user) => {
+const handleLogin = async (user) => {
     console.log("DATOS DEL USUARIO LOGUEADO:", user);
     setCurrentUser(user);
     localStorage.setItem('pluriUser', JSON.stringify(user));
 
-    // GUARDAR TOKEN PRIMERO para que apiFetch pueda leerlo de inmediato
     if (user?.access_token) {
       localStorage.setItem('token', user.access_token);
     }
@@ -41,28 +40,31 @@ export default function App() {
     }
 
     const userId = user?.id;
-    const puestoMapeado = String(user?.puesto || user?.puesto_id || 'recruiter');
-    const deptoMapeado = String(user?.departamento || 'Marketing');
+    const puestoMapeado = String(user?.puesto || user?.puesto_id || 'Desarrollador Backend');
+    const deptoMapeado = String(user?.departamento || 'Desarrollo de Software');
 
     const perfilActualizado = {
       id: userId,
       name: user.nombre || user.email,
+      puesto: puestoMapeado,
       position: puestoMapeado,
       puesto_id: puestoMapeado,
-      department: deptoMapeado
+      department: deptoMapeado,
+      departamento: deptoMapeado
     };
 
     setUserProfile(perfilActualizado);
 
     try {
-      // 1. Consultar el último diagnóstico usando apiFetch (ya incluye el token)
+      // 1. Consultar si existe un diagnóstico registrado previamente con score > 0
       const resDiag = await apiFetch(`/api/diagnostico/ultimo/${userId}`);
       
       if (resDiag.ok) {
         const dataDiag = await resDiag.json();
-        const puntajeObtenido = Number(dataDiag?.score || dataDiag?.puntaje || 0);
+        const objDiag = dataDiag?.diagnostico || dataDiag;
+        const puntajeObtenido = Number(objDiag?.score ?? objDiag?.puntaje ?? 0);
 
-        // Si el usuario ya completó un examen previamente con score > 0, va al Dashboard
+        // SOLO si el puntaje registrado en BD es mayor a 0, va directo al Dashboard
         if (puntajeObtenido > 0) {
           setFinalScore(puntajeObtenido);
           setStep(4); // Dashboard
@@ -70,8 +72,8 @@ export default function App() {
         }
       }
 
-      // 2. Si no tiene examen previo, pedimos las preguntas guardadas usando apiFetch
-      const resExam = await apiFetch(`/api/evaluaciones/diagnostico/${puestoMapeado}`);
+      // 2. Si no existe diagnóstico o es 0 pts (BD recién sembrada), cargamos el Examen Diagnóstico
+      const resExam = await apiFetch(`/api/evaluaciones/diagnostico/${encodeURIComponent(puestoMapeado)}`);
 
       if (resExam.ok) {
         const dataBD = await resExam.json();
@@ -81,7 +83,9 @@ export default function App() {
           const preguntasFormateadas = listaPreguntasBD.map(p => ({
             id: p.id,
             texto: p.pregunta || p.texto,
-            opciones: p.opciones
+            pregunta: p.pregunta || p.texto,
+            opciones: p.opciones,
+            opcion_correcta: p.opcion_correcta ?? p.respuesta_correcta ?? p.correcta
           }));
 
           setExamData({
@@ -89,12 +93,12 @@ export default function App() {
             duracion_minutos: 10,
             preguntas: preguntasFormateadas
           });
-          setStep(3); 
+          setStep(3); // Mostrar Examen
           return;
         }
       }
 
-      // Si no hay preguntas registradas en BD, ir al examen de todas formas
+      // Si no se reciben preguntas, ir al Examen por defecto
       setStep(3);
 
     } catch (err) {
@@ -118,6 +122,8 @@ export default function App() {
     setExamData(null);
     setFinalScore(0);
     setStep(1);
+    // Recarga limpia para limpiar cualquier estado de React en memoria
+    window.location.reload();
   };
 
   const esRRHH = currentUser?.rol === 'rh' || currentUser?.rol === 'rrhh' || currentUser?.rol === 'admin';

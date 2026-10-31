@@ -26,7 +26,8 @@ export const Dashboard = ({ userProfile, score, setScore, onLogout }) => {
 
   // Carga la ruta de aprendizaje y consulta la BD sobre el estado del examen del usuario
   const cargarRutaEHistorial = async () => {
-    if (!userProfile?.id) {
+    const usuarioId = userProfile?.id;
+    if (!usuarioId) {
       setCargando(false);
       return;
     }
@@ -34,64 +35,71 @@ export const Dashboard = ({ userProfile, score, setScore, onLogout }) => {
     setCargando(true);
     setErrorIA(null);
 
-    const usuarioId = userProfile.id;
-
-    // Cargar puesto y departamento con sus nombres reales desde la BD
     try {
-      const resPerfil = await apiFetch(`/api/usuarios/perfil/${usuarioId}`);
-      if (resPerfil.ok) {
-        const dataPerfil = await resPerfil.json();
-        setPerfilDetalle(dataPerfil);
+      // 1. Cargar Perfil de forma aislada
+      try {
+        const resPerfil = await apiFetch(`/api/usuarios/perfil/${usuarioId}`);
+        if (resPerfil.ok) {
+          const dataPerfil = await resPerfil.json();
+          setPerfilDetalle(dataPerfil);
+        }
+      } catch (e) {
+        console.warn("No se pudo cargar el detalle del perfil:", e);
       }
-    } catch (e) {
-      console.warn("No se pudo cargar el detalle del perfil:", e);
-    }
 
-    try {
-      // 1. Obtener la ruta de cursos del usuario
+      // 2. Obtener la ruta de cursos del usuario
       let listaCursosFinal = [];
-      const resGuardada = await apiFetch(`/api/rutas/usuario/${usuarioId}`);
-      if (resGuardada.ok) {
-        const dataGuardada = await resGuardada.json();
-        let listaGuardada = dataGuardada.ruta || dataGuardada.recomendaciones || dataGuardada.cursos || dataGuardada;
+      try {
+        const resGuardada = await apiFetch(`/api/rutas/usuario/${usuarioId}`);
+        if (resGuardada.ok) {
+          const dataGuardada = await resGuardada.json();
+          let listaGuardada = dataGuardada.ruta || dataGuardada.recomendaciones || dataGuardada.cursos || dataGuardada;
 
-        if (listaGuardada && typeof listaGuardada === 'object' && !Array.isArray(listaGuardada)) {
-          listaGuardada = listaGuardada.cursos || listaGuardada.ruta || [];
-        }
+          if (listaGuardada && typeof listaGuardada === 'object' && !Array.isArray(listaGuardada)) {
+            listaGuardada = listaGuardada.cursos || listaGuardada.ruta || [];
+          }
 
-        if (Array.isArray(listaGuardada) && listaGuardada.length > 0) {
-          listaCursosFinal = listaGuardada;
+          if (Array.isArray(listaGuardada) && listaGuardada.length > 0) {
+            listaCursosFinal = listaGuardada;
+          }
         }
+      } catch (e) {
+        console.warn("No se pudo obtener la ruta guardada:", e);
       }
 
+      // Generar por IA si no existen cursos previos
       if (listaCursosFinal.length === 0) {
-        const puestoUsuario = userProfile?.puesto_id || userProfile?.position || userProfile?.puesto || 'Desarrollador Junior';
+        const puestoUsuario = userProfile?.puesto || userProfile?.puesto_id || userProfile?.position || 'Desarrollador Backend';
         
-        const resIA = await apiFetch('/api/rutas/generar-ia', {
-          method: 'POST',
-          body: JSON.stringify({ 
-            usuario_id: usuarioId,
-            puesto_id: puestoUsuario
-          })
-        });
+        try {
+          const resIA = await apiFetch('/api/rutas/generar-ia', {
+            method: 'POST',
+            body: JSON.stringify({ 
+              usuario_id: usuarioId,
+              puesto_id: puestoUsuario
+            })
+          });
 
-        if (resIA.ok) {
-          const dataIA = await resIA.json();
-          let listaIA = dataIA.ruta || dataIA.recomendaciones || dataIA.cursos || dataIA;
+          if (resIA.ok) {
+            const dataIA = await resIA.json();
+            let listaIA = dataIA.ruta || dataIA.recomendaciones || dataIA.cursos || dataIA;
 
-          if (listaIA && typeof listaIA === 'object' && !Array.isArray(listaIA)) {
-            listaIA = listaIA.cursos || listaIA.ruta || [];
+            if (listaIA && typeof listaIA === 'object' && !Array.isArray(listaIA)) {
+              listaIA = listaIA.cursos || listaIA.ruta || [];
+            }
+
+            if (Array.isArray(listaIA)) {
+              listaCursosFinal = listaIA;
+            }
           }
-
-          if (Array.isArray(listaIA)) {
-            listaCursosFinal = listaIA;
-          }
+        } catch (e) {
+          console.error("Error al generar ruta con IA:", e);
         }
       }
 
       setCursosIA(listaCursosFinal);
 
-      // 2. Cargar estado del progreso de cursos
+      // 3. Cargar estado del progreso de cursos
       try {
         const resProgreso = await apiFetch(`/api/progreso/usuario/${usuarioId}`);
         if (resProgreso.ok) {
@@ -120,7 +128,7 @@ export const Dashboard = ({ userProfile, score, setScore, onLogout }) => {
         console.warn('No se pudo obtener progreso previo:', e);
       }
 
-      // 3. Consultar a la BD el último resultado de evaluación del usuario para RH
+      // 4. Consultar último resultado de evaluación final (soporta 403 o ausencia de historial)
       try {
         const resExamen = await apiFetch(`/api/evaluaciones/ultimo/${usuarioId}`);
         if (resExamen.ok) {
@@ -138,31 +146,30 @@ export const Dashboard = ({ userProfile, score, setScore, onLogout }) => {
           }
         }
       } catch (e) {
-        console.warn('No se encontró historial previo de examen en BD:', e);
+        console.warn('Historial de examen no disponible para este usuario:', e);
       }
 
-     // 4. Cargar Puntaje Diagnóstico si hace falta
-      if (!score || score === 0) {
-        try {
-          const resDiag = await apiFetch(`/api/diagnostico/ultimo/${usuarioId}`);
-          if (resDiag.ok) {
-            const dataDiag = await resDiag.json();
-            // Cambiamos dataDiag.puntaje por dataDiag.score
-            const puntajeObtenido = dataDiag.score ?? dataDiag.puntaje ?? 0;
-            
-            if (Number(puntajeObtenido) > 0 && typeof setScore === 'function') {
-              setScore(Number(puntajeObtenido));
-            }
+      // 5. Cargar Puntaje Diagnóstico guardado en la BD
+      try {
+        const resDiag = await apiFetch(`/api/diagnostico/ultimo/${usuarioId}`);
+        if (resDiag.ok) {
+          const dataDiag = await resDiag.json();
+          const objDiag = dataDiag.diagnostico || dataDiag;
+          const puntajeObtenido = objDiag.score ?? objDiag.puntaje;
+          
+          if (puntajeObtenido !== undefined && puntajeObtenido !== null) {
+            setScore(Number(puntajeObtenido));
           }
-        } catch (e) {
-          console.warn("No se pudo cargar el último diagnóstico:", e);
         }
+      } catch (e) {
+        console.warn("Diagnóstico no disponible:", e);
       }
 
     } catch (err) {
-      console.error('Error al conectar con el servidor backend:', err);
+      console.error('Error general en el Dashboard:', err);
       setErrorIA('Error al cargar la información.');
     } finally {
+      // Se asegura de quitar la pantalla de carga incluso si una API respondió con error
       setCargando(false);
     }
   };
@@ -179,15 +186,11 @@ export const Dashboard = ({ userProfile, score, setScore, onLogout }) => {
     return null;
   };
 
-// Función con integración xAPI completa
   const registrarProgresoXAPI = async (curso, accion) => {
-    // 1. Obtener el ID original del curso
-    let idCurso = typeof curso === 'object' ? (curso.id_curso || curso.id) : curso;
+    // Tomar el ID real sin modificarlo
+    const idCurso = typeof curso === 'object' ? (curso.id_curso || curso.id) : curso;
 
-    // 2. Si el ID es 1 o no es válido, asignamos el primer curso real de la BD (ID 2)
-    if (!idCurso || Number(idCurso) === 1) {
-      idCurso = 2; 
-    }
+    if (!idCurso) return;
 
     try {
       const res = await apiFetch('/api/progreso/actualizar', {
@@ -200,28 +203,10 @@ export const Dashboard = ({ userProfile, score, setScore, onLogout }) => {
       });
 
       if (res.ok) {
-        console.log(`✅ Progreso del curso ${idCurso} actualizado correctamente (${accion})`);
-
-        // 3. ACTUALIZAR ESTADO VISUAL (React)
-        if (typeof setRutaActual === 'function') {
-          setRutaActual(prevRuta => 
-            prevRuta.map(item => {
-              const esMismoCurso = (item.id_curso || item.id) === idCurso || (item.id === 1 && idCurso === 2);
-              if (esMismoCurso) {
-                return { ...item, estatus: 'completado', completado: true };
-              }
-              return item;
-            })
-          );
+        console.log(`✅ Progreso del curso ${idCurso} actualizado (${accion})`);
+        if (userProfile?.id) {
+          cargarRutaEHistorial();
         }
-
-        // 4. Recargar el historial/progreso si la función existe en tu Dashboard
-        if (typeof cargarRutaEHistorial === 'function' && userProfile?.id) {
-          cargarRutaEHistorial(userProfile.id);
-        }
-
-      } else {
-        console.warn(`⚠️ No se pudo registrar progreso para el curso ID ${idCurso}`);
       }
     } catch (err) {
       console.error('Error registrando progreso:', err);
@@ -237,12 +222,31 @@ export const Dashboard = ({ userProfile, score, setScore, onLogout }) => {
     if (idCurso) registrarProgresoXAPI(idCurso, 'launched');
   };
 
-  const handleCompletarCurso = (curso) => {
+  const handleCompletarCurso = async (curso) => {
     const idCurso = typeof curso === 'object' ? (curso.id_curso || curso.id) : null;
-    if (idCurso) registrarProgresoXAPI(idCurso, 'completed');
+    if (!idCurso || !userProfile?.id) return;
+
+    try {
+      await registrarProgresoXAPI(idCurso, 'completed');
+
+      const res = await apiFetch("/api/cursos/completar", {
+        method: "POST",
+        body: JSON.stringify({
+          usuario_id: userProfile.id,
+          curso_id: Number(idCurso),
+          estatus: "completado"
+        })
+      });
+
+      if (res.ok) {
+        alert("¡Curso completado con éxito!");
+        cargarRutaEHistorial();
+      }
+    } catch (err) {
+      console.error("Error al completar el curso:", err);
+    }
   };
 
-  // Validar si completó el 100% de los cursos
   const todosCompletados = cursosIA.length > 0 && cursosIA.every((curso, idx) => {
     const idCurso = typeof curso === 'object' && curso !== null 
       ? (curso.id_curso || curso.id || idx + 1)
@@ -281,7 +285,6 @@ export const Dashboard = ({ userProfile, score, setScore, onLogout }) => {
     }
   };
 
-  // Guardar el examen directamente en la BD
   const manejarFinalizacion = async (resultado) => {
     setMostrarExamen(false);
     setResultadoExamen(resultado);
@@ -289,7 +292,6 @@ export const Dashboard = ({ userProfile, score, setScore, onLogout }) => {
     const nuevosIntentos = resultado.aprobado ? intentosRestantes : Math.max(0, intentosRestantes - 1);
     setIntentosRestantes(nuevosIntentos);
 
-    // Enviar el resultado al Backend para guardarlo en la tabla 'evaluaciones_resultados'
     try {
       await apiFetch('/api/evaluaciones/guardar-resultado', {
         method: 'POST',
@@ -317,8 +319,8 @@ export const Dashboard = ({ userProfile, score, setScore, onLogout }) => {
             ¡Hola, {perfilDetalle?.nombre || userProfile?.name || userProfile?.nombre || 'Empleado'}!
           </h1>
           <p className="text-slate-500 text-sm mt-1">
-            Puesto: <strong className="text-slate-700">{perfilDetalle?.puesto_nombre || userProfile?.position || 'General'}</strong> | 
-            Departamento: <strong className="text-slate-700">{perfilDetalle?.departamento_nombre || userProfile?.department || 'General'}</strong>
+            Puesto: <strong className="text-slate-700">{perfilDetalle?.puesto_nombre || userProfile?.puesto || 'General'}</strong> | 
+            Departamento: <strong className="text-slate-700">{perfilDetalle?.departamento_nombre || userProfile?.departamento || 'General'}</strong>
           </p>
         </div>
 
@@ -497,7 +499,7 @@ export const Dashboard = ({ userProfile, score, setScore, onLogout }) => {
         )}
       </div>
 
-      {/* Renderizado del Modal de Examen */}
+      {/* Renderizado del Modal de Examen Final */}
       {mostrarExamen && (
         <ModalExamen
           examenData={datosExamen}

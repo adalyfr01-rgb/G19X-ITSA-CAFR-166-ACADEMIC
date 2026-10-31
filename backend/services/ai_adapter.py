@@ -17,6 +17,7 @@ def generar_ruta_aprendizaje(puesto_nombre: str, respuestas_diagnostico: list, c
     """
     
     # 1. Prompt enriquecido
+    # 1. Prompt enriquecido y balanceado
     prompt = f"""
     Actúa como un Director de Capacitación Organizacional y Experto en Pedagogía.
     
@@ -27,11 +28,15 @@ def generar_ruta_aprendizaje(puesto_nombre: str, respuestas_diagnostico: list, c
     CATÁLOGO DE CURSOS DISPONIBLES EN LA BASE DE DATOS:
     {json.dumps(cursos_disponibles, ensure_ascii=False)}
 
-    INSTRUCCIONES:
+    INSTRUCCIONES Y REGLAS DE CANTIDAD:
     1. Analiza qué temas del diagnóstico respondió mal o con dudas el usuario para identificar sus brechas específicas de conocimiento.
-    2. De los cursos del catálogo, selecciona los más relevantes para cerrar esas brechas y ordénalos pedagógicamente (priorizando las mayores deficiencias).
-    3. Copia el campo 'descripcion' EXACTAMENTE como viene en el catálogo de entrada (NO inventes ni reescribas descripciones nuevas).
-    4. INCLUYE el campo 'justificacion' redactado por ti, explicando brevemente por qué se le asigna dicho curso según sus fallos del diagnóstico.
+    2. REGLA ESTRICTA DE SELECCIÓN (Criterio por Calificación):
+       - Si el usuario obtuvo un PUNTAJE ALTO (80-100 pts): Asigna exactamente ENTRE 2 Y 3 CURSOS (el curso para reforzar su fallo + 1 o 2 cursos clave de perfeccionamiento/actualización). NUNCA asignes 1 solo curso.
+       - Si el usuario obtuvo un PUNTAJE MEDIO (40-60 pts): Asigna entre 3 Y 4 CURSOS enfocado en sus brechas directas.
+       - Si el usuario obtuvo un PUNTAJE BAJO (0-20 pts): Asigna ENTRE 4 Y 5 CURSOS (el plan completo de fundamentos).
+    3. De los cursos del catálogo, selecciona únicamente los elegidos bajo la regla anterior y ordénalos pedagógicamente (priorizando las mayores deficiencias).
+    4. Copia el campo 'descripcion' EXACTAMENTE como viene en el catálogo de entrada (NO inventes ni reescribas descripciones nuevas).
+    5. INCLUYE el campo 'justificacion' redactado por ti, explicando brevemente por qué se le asigna dicho curso según sus fallos o nivel demostrado en el diagnóstico.
 
     ESTRUCTURA OBLIGATORIA DE RESPUESTA (Únicamente JSON válido):
     {{

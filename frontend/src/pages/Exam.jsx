@@ -6,7 +6,6 @@ export const Exam = ({ examData, userName = "Empleado", userProfile = {}, onComp
   const [answers, setAnswers] = useState({});
   const [submitted, setSubmitted] = useState(false);
   const [score, setScore] = useState(0);
-  const [isGeneratingPath, setIsGeneratingPath] = useState(false);
 
   const [timeLeft, setTimeLeft] = useState(180);
 
@@ -36,9 +35,10 @@ export const Exam = ({ examData, userName = "Empleado", userProfile = {}, onComp
 
   const handleSelectOption = (questionId, optionIndex) => {
     if (submitted) return;
+    const key = (questionId !== undefined && questionId !== null) ? questionId : currentIndex;
     setAnswers((prev) => ({
       ...prev,
-      [questionId]: optionIndex
+      [key]: optionIndex
     }));
   };
 
@@ -59,22 +59,35 @@ export const Exam = ({ examData, userName = "Empleado", userProfile = {}, onComp
     setSubmitted(true);
 
     let aciertos = 0;
-    questionsList.forEach((q) => {
-      if (answers[q.id] === q.opcion_correcta) {
-        aciertos += 1;
+
+    questionsList.forEach((q, idx) => {
+      const qKey = q.id !== undefined ? q.id : idx;
+      const selectedIndex = answers[qKey];
+      
+      const correctaBD = q.opcion_correcta ?? q.respuesta_correcta ?? q.correcta;
+
+      if (selectedIndex !== undefined && selectedIndex !== null && correctaBD !== undefined) {
+        const esCorrectoIndex = Number(selectedIndex) === Number(correctaBD);
+        const esCorrectoTexto = q.opciones?.[selectedIndex] === correctaBD;
+
+        if (esCorrectoIndex || esCorrectoTexto) {
+          aciertos += 1;
+        }
       }
     });
 
     const calculatedScore = totalQuestions > 0 ? Math.round((aciertos / totalQuestions) * 100) : 0;
     setScore(calculatedScore);
 
-    // Guardar diagnóstico usando apiFetch
+    // Mantenemos el puesto en string exacto como lo requiere tu backend
+    const puestoNombre = userProfile?.puesto || userProfile?.puesto_id || "Desarrollador Backend";
+
     try {
       await apiFetch('/api/diagnostico/guardar', {
         method: 'POST',
         body: JSON.stringify({
           usuario_id: userProfile?.id,
-          puesto_id: userProfile?.puesto_id || userProfile?.position || 1,
+          puesto_id: puestoNombre,
           score: calculatedScore
         })
       });
@@ -123,16 +136,18 @@ export const Exam = ({ examData, userName = "Empleado", userProfile = {}, onComp
       {currentQuestion && (
         <div className="space-y-4">
           <h3 className="text-lg font-bold text-slate-900">
-            {currentQuestion.pregunta || currentQuestion.texto}
+            {currentQuestion.texto || currentQuestion.pregunta}
           </h3>
 
           <div className="space-y-2">
             {(currentQuestion.opciones || []).map((opcion, idx) => {
-              const isSelected = answers[currentQuestion.id] === idx;
+              const qKey = currentQuestion.id !== undefined ? currentQuestion.id : currentIndex;
+              const isSelected = answers[qKey] === idx;
+
               return (
                 <button
                   key={idx}
-                  onClick={() => handleSelectOption(currentQuestion.id, idx)}
+                  onClick={() => handleSelectOption(qKey, idx)}
                   className={`w-full text-left p-4 rounded-xl border text-sm font-medium transition-all ${
                     isSelected
                       ? 'border-indigo-600 bg-indigo-50 text-indigo-900 shadow-sm'
