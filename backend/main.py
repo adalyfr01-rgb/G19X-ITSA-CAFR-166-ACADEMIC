@@ -308,9 +308,11 @@ def obtener_perfil_usuario(usuario_id: int, db: Session = Depends(get_db), curre
             "departamento_nombre": nombre_depto
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         print("Error en /api/usuarios/perfil:", e)
-        raise HTTPException(status_code=500, detail=f"Error al obtener el perfil de usuario: {str(e)}")
+        raise HTTPException(status_code=500, detail="Error al obtener el perfil de usuario.")
     
 @app.post("/api/rutas/generar-ia", tags=["Rutas"])
 def generar_ruta_ia(datos: dict, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
@@ -823,9 +825,12 @@ async def obtener_ultimo_diagnostico(usuario_id: int, db: Session = Depends(get_
             return {"mensaje": "No hay diagnostico previo", "score": 0}
             
         return dict(resultado._mapping)
+    
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"Error en diagnostico/ultimo: {e}")
-        return {"mensaje": "Error en servidor", "score": 0}
+        raise HTTPException(status_code=500, detail="Error al consultar el diagnóstico del usuario.")
     
 @app.get("/api/diagnostico/usuario/{usuario_id}")
 def obtener_diagnosticos_usuario(usuario_id: int, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
@@ -1086,9 +1091,11 @@ def obtener_preguntas_por_puesto(puesto_id: str, db: Session = Depends(get_db)):
             }
             for p in preguntas
         ]
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"Error al obtener preguntas: {e}")
-        return []
+        raise HTTPException(status_code=500, detail="Error al obtener las preguntas de la evaluación.")
     
 @app.post("/api/admin/preguntas/crear")
 def crear_pregunta_rh(data: PreguntaCreateRequest, db: Session = Depends(get_db), admin_user: dict = Depends(require_admin)):
