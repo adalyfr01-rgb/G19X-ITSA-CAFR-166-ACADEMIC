@@ -19,7 +19,11 @@ Utiliza la API de Google Gemini para la generación dinámica de rutas de aprend
 
 ## Configuración
 
-Copia el archivo `.env.example` a `.env` dentro de la carpeta `backend/` y reemplaza los valores con tus credenciales locales (`DATABASE_URL` para PostgreSQL, `GEMINI_API_KEY` para la IA y `JWT_SECRET_KEY` para la firma de tokens JWT).
+Copia el archivo `.env.example` a `.env` dentro de la carpeta `backend/` y reemplaza los valores con tus credenciales locales:
+- `DATABASE_URL`: Cadena de conexión para PostgreSQL (ej. `postgresql://usuario:password@localhost:5432/capacitacion_db`).
+- `GEMINI_API_KEY`: Clave de API para Google Gemini (generación de rutas e IA).
+- `JWT_SECRET_KEY`: Clave secreta para la firma de tokens JWT.
+- `CORS_ORIGINS`: Lista de dominios permitidos para peticiones CORS separados por coma (ej. `http://localhost:5173`).
 
 > **Nota importante:** El archivo `.env` debe existir obligatoriamente antes de ejecutar cualquier script o iniciar el servidor, ya que `database.py` requiere la variable `DATABASE_URL` para establecer la conexión a la base de datos.
 
@@ -70,4 +74,7 @@ Para probar el sistema, inicia sesión ingresando con **correo electrónico** y 
 - **David Aguilar:** `david.aguilar@plurione.com` / `password123`
 
 ## Lo que todavía no funciona
-Actualmente ninguna funcionalidad del flujo principal presenta fallos. El sistema opera de manera integral desde el inicio de sesión hasta la evaluación final y administración de RH.
+El flujo principal de autenticación, diagnóstico con IA, plan de capacitación y panel de RH se encuentra operativo. Sin embargo, para efectos de alcance del proyecto y de esta entrega, existen las siguientes consideraciones técnicas y alcances conocidos:
+
+1. **Alcance de Exportación de Métricas:** El botón de exportación a CSV en el panel de RH descarga el reporte de los eventos y registros de interacción (xAPI), sin incluir reportes personalizados o avanzados por usuario.
+2. **Recuperación de Contraseña:** El sistema no cuenta con un flujo para restablecer o recuperar contraseñas mediante correo electrónico en caso de olvido.
