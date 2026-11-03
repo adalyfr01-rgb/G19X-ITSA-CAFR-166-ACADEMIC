@@ -1081,7 +1081,6 @@ def obtener_preguntas_por_puesto(puesto_id: str, db: Session = Depends(get_db)):
                 "pregunta": p.texto,
                 "texto": p.texto,
                 "opciones": p.opciones,
-                "opcion_correcta": p.opcion_correcta,
                 "categoria": p.categoria,
                 "puesto": p.puesto
             }

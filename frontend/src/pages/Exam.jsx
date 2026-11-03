@@ -54,49 +54,48 @@ export const Exam = ({ examData, userName = "Empleado", userProfile = {}, onComp
     }
   };
 
-  const handleFinalize = async () => {
+const handleFinalize = async () => {
     if (submitted) return;
     setSubmitted(true);
 
-    let aciertos = 0;
-
-    questionsList.forEach((q, idx) => {
+    // 1. Armar las respuestas con pregunta_id y la opción seleccionada (-1 si no contestó)
+    const respuestas = questionsList.map((q, idx) => {
       const qKey = q.id !== undefined ? q.id : idx;
-      const selectedIndex = answers[qKey];
-      
-      const correctaBD = q.opcion_correcta ?? q.respuesta_correcta ?? q.correcta;
-
-      if (selectedIndex !== undefined && selectedIndex !== null && correctaBD !== undefined) {
-        const esCorrectoIndex = Number(selectedIndex) === Number(correctaBD);
-        const esCorrectoTexto = q.opciones?.[selectedIndex] === correctaBD;
-
-        if (esCorrectoIndex || esCorrectoTexto) {
-          aciertos += 1;
-        }
-      }
+      const opcionElegida = answers[qKey];
+      return {
+        pregunta_id: q.id ?? idx,
+        opcion_seleccionada: (opcionElegida !== undefined && opcionElegida !== null) ? opcionElegida : -1
+      };
     });
 
-    const calculatedScore = totalQuestions > 0 ? Math.round((aciertos / totalQuestions) * 100) : 0;
-    setScore(calculatedScore);
-
-    // Mantenemos el puesto en string exacto como lo requiere tu backend
     const puestoNombre = userProfile?.puesto || userProfile?.puesto_id || "Desarrollador Backend";
 
     try {
-      await apiFetch('/api/diagnostico/guardar', {
+      // 2. Enviar las respuestas para calificación y guardado automático en Backend
+      const res = await apiFetch('/api/evaluaciones/diagnostico/evaluar', {
         method: 'POST',
         body: JSON.stringify({
           usuario_id: userProfile?.id,
           puesto_id: puestoNombre,
-          score: calculatedScore
+          respuestas: respuestas
         })
       });
-    } catch (err) {
-      console.error("Error guardando el diagnóstico:", err);
-    }
 
-    if (onComplete) {
-      onComplete(calculatedScore);
+      if (res.ok) {
+        const data = await res.json();
+        const calculatedScore = data.score ?? 0;
+
+        // 3. Usar el puntaje devuelto por el backend
+        setScore(calculatedScore);
+
+        if (onComplete) {
+          onComplete(calculatedScore);
+        }
+      } else {
+        console.error("Error en la respuesta del backend al evaluar el diagnóstico.");
+      }
+    } catch (err) {
+      console.error("Error enviando el diagnóstico al backend:", err);
     }
   };
 
