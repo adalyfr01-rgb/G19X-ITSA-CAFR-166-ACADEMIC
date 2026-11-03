@@ -786,7 +786,8 @@ def actualizar_progreso(payload: dict, db: Session = Depends(get_db), current_us
     }
 
 @app.get("/api/progreso/usuario/{usuario_id}")
-def obtener_progreso_usuario(usuario_id: int, db: Session = Depends(get_db)):
+def obtener_progreso_usuario(usuario_id: int, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
+    exigir_mismo_usuario(current_user, usuario_id)
     progreso_model = getattr(models, "ProgresoCurso", getattr(models, "Progreso", None))
     progresos = db.query(progreso_model).filter(progreso_model.id_usuario == usuario_id).all()
     
@@ -834,11 +835,13 @@ def obtener_diagnosticos_usuario(usuario_id: int, db: Session = Depends(get_db),
 
 
 @app.post("/api/evaluaciones/generar")
-def api_generar_evaluacion(payload: dict, db: Session = Depends(get_db)):
+def api_generar_evaluacion(payload: dict, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
     usuario_id = payload.get("usuario_id")
     
     if not usuario_id:
         raise HTTPException(status_code=400, detail="usuario_id es requerido.")
+    
+    exigir_mismo_usuario(current_user, usuario_id)
 
     ruta_guardada = db.query(models.RutaAprendizaje).filter(
         models.RutaAprendizaje.id_usuario == usuario_id
