@@ -39,11 +39,16 @@ load_dotenv()
 
 models.Base.metadata.create_all(bind=engine)
 
+import os
+
 app = FastAPI()
+
+# Leer los orígenes permitidos desde .env (o localhost por defecto)
+ORIGENES_PERMITIDOS = os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ORIGENES_PERMITIDOS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -209,47 +214,18 @@ def login(data: LoginData, db: Session = Depends(get_db)):
 @app.get("/api/usuarios/simulador")
 def obtener_usuarios_simulador(db: Session = Depends(get_db)):
     try:
-        puestos_db = db.query(models.Puesto).all()
-        puestos_map = {str(p.id): p.nombre for p in puestos_db}
-
         usuarios = db.query(models.Usuario).all()
-        resultado = []
-        
-        for u in usuarios:
-            val_puesto = getattr(u, 'puesto', None) or getattr(u, 'puesto_id', None)
-            val_puesto_str = str(val_puesto) if val_puesto is not None else ""
-            nombre_puesto = puestos_map.get(val_puesto_str, val_puesto_str or "Sin puesto")
-            rol_usuario = getattr(u, 'rol', 'empleado')
-
-            resultado.append({
-                "id": u.id,
-                "nombre": u.nombre,
-                "email": u.email,
-                "rol": rol_usuario,
-                "departamento": getattr(u, 'departamento', ''),
-                "puesto": val_puesto,
-                "puesto_nombre": nombre_puesto
-                # ⚠️ Se eliminó "access_token" para evitar la fuga de seguridad
-            })
-            
-        return resultado
-
-    except Exception as e:
-        print("Error en /api/usuarios/simulador:", e)
-        usuarios_fallback = db.query(models.Usuario).all()
         return [
             {
-                "id": u.id,
                 "nombre": u.nombre,
-                "email": u.email,
-                "rol": getattr(u, 'rol', 'empleado'),
-                "puesto": getattr(u, 'puesto', ''),
-                "puesto_nombre": getattr(u, 'puesto', '')
-                # ⚠️ Se eliminó "access_token" del fallback
+                "email": u.email
             }
-            for u in usuarios_fallback
+            for u in usuarios
         ]
-        
+    except Exception as e:
+        print("Error en /api/usuarios/simulador:", e)
+        raise HTTPException(status_code=500, detail="Error al obtener usuarios del simulador.")
+    
 @app.get("/api/perfiles")
 def obtener_perfiles(db: Session = Depends(get_db)):
     departamentos = db.query(Departamento).all()
