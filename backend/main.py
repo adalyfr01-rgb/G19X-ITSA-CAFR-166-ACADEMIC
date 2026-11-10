@@ -459,55 +459,12 @@ def generar_ruta_ia(datos: dict, db: Session = Depends(get_db), current_user: di
             "cursos": ruta_final_enriquecida
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"Error general en generar_ruta_ia: {e}")
         db.rollback()
-        return {"status": "error", "mensaje": "Ocurrió un error al generar la ruta con la IA."}
-
-@app.post("/api/diagnostico/guardar")
-def guardar_diagnostico(data: GuardarDiagnosticoRequest, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
-    exigir_mismo_usuario(current_user, data.usuario_id)
-        
-    usuario = db.query(models.Usuario).filter(models.Usuario.id == data.usuario_id).first()
-    if not usuario:
-        raise HTTPException(status_code=404, detail="El usuario especificado no existe.")
-
-    # 1. Guardar o actualizar en la tabla diagnosticos
-    diag_existente = db.query(models.Diagnostico).filter(models.Diagnostico.usuario_id == data.usuario_id).first()
-    
-    if diag_existente:
-        diag_existente.score = data.score
-        diag_existente.puesto_evaluado = str(data.puesto_id)
-        nuevo_diagnostico = diag_existente
-    else:
-        nuevo_diagnostico = models.Diagnostico(
-            usuario_id=data.usuario_id,
-            puesto_evaluado=str(data.puesto_id),
-            score=data.score
-        )
-        db.add(nuevo_diagnostico)
-
-    # 2. Registrar evento xAPI SIN enviar 'score' ni 'activity' como argumentos directos
-    try:
-        statement_xapi = models.XAPIStatement(
-        usuario_id=data.usuario_id,
-        verb="completed",
-        object_id="diagnostico-inicial",
-        statement_json={
-            "actor": usuario.email,
-            "verb": "completed",
-            "object": "diagnostico-inicial",
-            "score": float(data.score)
-        }
-    )
-        db.add(statement_xapi)
-    except Exception as e:
-        print(f"Aviso xAPI: {e}")
-
-    db.commit()
-    db.refresh(nuevo_diagnostico)
-
-    return {"status": "ok", "diagnostico": {"score": nuevo_diagnostico.score}}
+        raise HTTPException(status_code=500, detail="No se pudo generar la ruta de aprendizaje.")
 
 @app.post("/api/cursos", status_code=status.HTTP_201_CREATED)
 def crear_curso(curso: CursoCreate, db: Session = Depends(get_db), admin_user: dict = Depends(require_admin)):
