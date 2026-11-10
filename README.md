@@ -18,25 +18,34 @@ Utiliza la API de Google Gemini para la generación dinámica de rutas de aprend
 - PostgreSQL 16+
 
 ## Configuración
+1. Configuración del Backend
+Copia el archivo `.env.example` a `.env` dentro de la carpeta `backend/` y ajusta tus credenciales locales:
 
-Copia el archivo `.env.example` a `.env` dentro de la carpeta `backend/` y reemplaza los valores con tus credenciales locales:
+```bash
+cd backend
+cp .env.example .env
+```
+Abre el archivo backend/.env y completa las variables:
 - `DATABASE_URL`: Cadena de conexión para PostgreSQL (ej. `postgresql://usuario:password@localhost:5432/capacitacion_db`).
 - `GEMINI_API_KEY`: Clave de API para Google Gemini (generación de rutas e IA).
 - `JWT_SECRET_KEY`: Clave secreta para la firma de tokens JWT.
+Puedes generar una ejecutando en la terminal:
+```bash
+python -c "import secrets; print(secrets.token_hex(32))"
+```
+
 - `CORS_ORIGINS`: Lista de dominios permitidos para peticiones CORS separados por coma (ej. `http://localhost:5173`).
 
-> **Nota importante:** El archivo `.env` debe existir obligatoriamente antes de ejecutar cualquier script o iniciar el servidor, ya que `database.py` requiere la variable `DATABASE_URL` para establecer la conexión a la base de datos.
+> **Nota importante:** El archivo backend/.env debe existir obligatoriamente antes de ejecutar cualquier script o iniciar el servidor, ya que database.py y security.py requieren estas variables.
 
-## Base de datos
-
-1. Crea una base de datos vacía llamada `capacitacion_db` en PostgreSQL.
-2. Para cargar la estructura y los datos de prueba iniciales, ejecuta desde la carpeta `backend/`:
+2. Configuración del Frontend
+Crea el archivo `.env` en la carpeta `frontend/` a partir de su plantilla antes de iniciar el cliente:
 
 ```bash
-python seed.py
+cd frontend
+cp .env.example .env
 ```
-> ⚠️ **Atención si ya tenías la base de datos creada previamente:**  
-> Si tu base de datos ya contenía usuarios con contraseñas guardadas en texto plano (sin cifrar), es **necesario borrar esos usuarios o eliminar y recrear la base de datos `capacitacion_db`** antes de volver a ejecutar `python seed.py`. Debido a que `seed.py` no sobrescribe usuarios existentes y el sistema ahora requiere autenticación con contraseñas cifradas (hash bcrypt), el inicio de sesión no reconocerá las contraseñas antiguas sin cifrar.
+Verifica que contenga la URL del backend: `VITE_API_URL=http://localhost:8000`
 
 ## Cómo instalarlo y ejecutarlo
 
@@ -44,21 +53,40 @@ python seed.py
 ```bash
 cd backend
 python -m venv venv
+# En Windows:
 venv\Scripts\activate
+# En Linux/macOS:
+# source venv/bin/activate
+
 pip install -r requirements.txt
-uvicorn main:app --reload
 ```
 
-**Frontend (React + Vite):**
+## Base de datos
+
+1. Crea una base de datos vacía llamada `capacitacion_db` en PostgreSQL.
+2. Con el entorno virtual del backend activo (venv), ejecuta desde la carpeta `backend/`:
+
+```bash
+python seed.py
+```
+> ⚠️ **Atención si ya tenías la base de datos creada previamente:**  
+> Si tu base de datos ya contenía usuarios con contraseñas guardadas en texto plano (sin cifrar), es **necesario eliminar y recrear la base de datos `capacitacion_db`** antes de volver a ejecutar `python seed.py`. Debido a que `seed.py` no sobrescribe usuarios existentes y el sistema ahora requiere autenticación con contraseñas cifradas (hash bcrypt), el inicio de sesión no reconocerá las contraseñas antiguas sin cifrar.
+
+**Inicia el servidor backend:**
+
+```bash
+uvicorn main:app --reload
+```
+El servidor backend estará corriendo en: http://localhost:8000
+
+## Levantar Frontend (React + Vite)
+En una segunda terminal, dirígete a la carpeta `frontend/`:
+
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
-### Configuración de Variables de Entorno del Frontend
-Crea un archivo `.env` dentro de `frontend/` tomando como base `frontend/.env.example`:
-`VITE_API_URL=http://localhost:8000`
-
 Se abre en http://localhost:5173
 
 ## Usuarios de Prueba
@@ -78,3 +106,4 @@ El flujo principal de autenticación, diagnóstico con IA, plan de capacitación
 
 1. **Alcance de Exportación de Métricas:** El botón de exportación a CSV en el panel de RH descarga el reporte de los eventos y registros de interacción (xAPI), sin incluir reportes personalizados o avanzados por usuario.
 2. **Recuperación de Contraseña:** El sistema no cuenta con un flujo para restablecer o recuperar contraseñas mediante correo electrónico en caso de olvido.
+3. **Calificación del Examen Final:** La evaluación y cálculo de la calificación del examen final se procesa directamente en el navegador (cliente) y no valida el resultado desde el backend.
