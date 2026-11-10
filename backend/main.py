@@ -462,7 +462,7 @@ def generar_ruta_ia(datos: dict, db: Session = Depends(get_db), current_user: di
     except Exception as e:
         print(f"Error general en generar_ruta_ia: {e}")
         db.rollback()
-        return {"status": "error", "mensaje": str(e)}
+        return {"status": "error", "mensaje": "Ocurrió un error al generar la ruta con la IA."}
 
 @app.post("/api/diagnostico/guardar")
 def guardar_diagnostico(data: GuardarDiagnosticoRequest, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
@@ -1026,11 +1026,8 @@ def registrar_xapi_statement(data: XAPIStatementCreate, db: Session = Depends(ge
         return {"status": "ok", "mensaje": "Statement xAPI registrado con éxito", "id": nuevo_statement.id}
     except Exception as e:
         db.rollback()
-        print(f"Error guardando xAPI statement: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error interno al registrar el evento xAPI: {str(e)}"
-        )
+        print("Error al registrar evento xAPI:", e)
+        raise HTTPException(status_code=500, detail="Error interno al registrar el evento.")
    
 
 @app.get("/api/evaluaciones/diagnostico/{puesto_id:path}", tags=["Evaluaciones"])
@@ -1094,10 +1091,8 @@ def crear_pregunta_rh(data: PreguntaCreateRequest, db: Session = Depends(get_db)
         }
     except Exception as e:
         db.rollback()
-        raise HTTPException(
-            status_code=500, 
-            detail=f"Error al guardar la pregunta: {str(e)}"
-        )
+        print("Error al crear la pregunta:", e)
+        raise HTTPException(status_code=500, detail="Error al guardar la pregunta.")
         
 @app.post("/api/evaluaciones/diagnostico/evaluar")
 def evaluar_diagnostico_dinamico(data: EvaluarDiagnosticoRequest, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user)):
@@ -1255,7 +1250,8 @@ def obtener_metricas_admin(db: Session = Depends(get_db), admin_user: dict = Dep
         
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error consultando métricas: {str(e)}")
+        print("Error al obtener métricas:", e)
+        raise HTTPException(status_code=500, detail="Error al obtener las métricas del sistema.")
 
 app.include_router(router)
 
@@ -1377,10 +1373,8 @@ def obtener_preguntas_rh(puesto: str = None, db: Session = Depends(get_db), admi
         preguntas = query.all()
         return preguntas
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error al obtener las preguntas: {str(e)}"
-        )
+        print("Error al obtener las preguntas:", e)
+        raise HTTPException(status_code=500, detail="Error al obtener la lista de preguntas.")
 
 # 2. EDITAR / ACTUALIZAR PREGUNTA
 @app.put("/api/admin/preguntas/actualizar/{pregunta_id}")
@@ -1406,10 +1400,8 @@ def actualizar_pregunta_rh(pregunta_id: int, data: PreguntaCreateRequest, db: Se
         }
     except Exception as e:
         db.rollback()
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error al actualizar la pregunta: {str(e)}"
-        )
+        print("Error al actualizar la pregunta:", e)
+        raise HTTPException(status_code=500, detail="Error al actualizar la pregunta.")
 
 # 3. ELIMINAR PREGUNTA
 @app.delete("/api/admin/preguntas/eliminar/{pregunta_id}")
@@ -1428,10 +1420,8 @@ def eliminar_pregunta_rh(pregunta_id: int, db: Session = Depends(get_db), admin_
         }
     except Exception as e:
         db.rollback()
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error al eliminar la pregunta: {str(e)}"
-        )
+        print("Error al eliminar la pregunta:", e)
+        raise HTTPException(status_code=500, detail="Error al eliminar la pregunta.")
         
 
 @app.post("/api/cursos/completar")
